@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vantage — Competitor Growth Intelligence</title>
+  <meta name="description" content="Strategic competitor intelligence across Meta & Google ads, SEO and answer-engine visibility." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%231fb8a6'/><text x='50' y='70' font-size='62' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='bold'>V</text></svg>" />
+  <link rel="stylesheet" href="styles/app.css" />
+</head>
+<body>
+  <div class="mesh"></div>
+
+  <div class="app">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brandmark">
+        <div class="logo">V</div>
+        <div class="name">Vantage<span>Growth Intelligence</span></div>
+      </div>
+      <div id="nav"></div>
+      <div class="spacer"></div>
+      <div class="themeToggle">
+        <button id="sun" data-theme="light">Light</button>
+        <button id="moon" data-theme="dark">Dark</button>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+      <div class="topbar">
+        <div>
+          <div class="ttl" id="title">Executive Overview</div>
+          <div class="sub" id="subtitle">Lumen Skincare · Strategic growth audit</div>
+        </div>
+        <div class="spacer"></div>
+        <span id="brandpill"></span>
+        <span class="chip"><span class="dot"></span>Audit · 13 Jun 2026</span>
+        <button class="btn ghost" id="new-audit">＋ New audit</button>
+      </div>
+      <div id="main-body"></div>
+    </main>
+  </div>
+
+  <div id="onboard-root"></div>
+  <div class="tip" id="tip"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
