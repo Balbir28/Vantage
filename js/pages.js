@@ -455,6 +455,43 @@ function geoSection() {
     </div>`;
 }
 
+// AI Research Agent — one click opens an answer engine pre-loaded with a deep,
+// Bain-grade research prompt for THIS brand. The AI does the live scan on the
+// user's own free account — the only genuinely-free way to "auto-scan" competitors.
+function aiResearch() {
+  const brand = brandName();
+  const dom = STATE.domain || "";
+  const comps = competitorNames().slice(0, 5).join(", ");
+  const cat = (STATE.site && STATE.site.description) ? STATE.site.description.split(/[-–—,|]/)[0].trim().slice(0, 50) : `${brand}'s category`;
+  const P = encodeURIComponent;
+  const prompts = [
+    { t: "Full competitor teardown", icon: "🎯",
+      p: `Act as a Bain & Company D2C growth partner. Do a deep, sourced competitor analysis of ${brand} (${dom}) vs ${comps} in the Indian market. Cover: (1) positioning & hero products, (2) pricing strategy, (3) the ad angles/hooks each runs on Meta & Google, (4) their top organic & paid keywords, (5) recurring customer complaints from Reddit & Amazon reviews, (6) AEO/GEO visibility, and (7) the 3 highest-leverage moves for ${brand} to build toward a ₹1000 Cr brand. Cite live sources.` },
+    { t: "Scan their live ads", icon: "📣",
+      p: `Check the Meta Ad Library and Google Ads Transparency Center for ${brand} and competitors ${comps}. Summarise the creative angles & hooks each is running now, which ads have run longest (winners), offers in market, and 3 ad angles ${brand} is NOT using (white space). Cite sources.` },
+    { t: "Mine customer complaints", icon: "💬",
+      p: `Search Reddit and Amazon.in reviews for ${brand} and ${comps} in India. What do real customers complain about most, what product gaps recur, and what should ${brand} build or say differently? Quote real phrases and cite.` },
+    { t: "Test your AEO/GEO visibility", icon: "🔎",
+      p: `When an Indian buyer asks for the best brand in ${cat}, is ${brand} recommended? Compare how often ${brand} vs ${comps} get mentioned and cited in your answer, then give a concrete plan to make ${brand} the cited answer in ChatGPT, Gemini, Perplexity and Google AI.` },
+  ];
+  const cards = prompts.map((x) => `
+    <div class="opp">
+      <div class="rank" style="background:linear-gradient(135deg,var(--indigo),var(--violet))">${x.icon}</div>
+      <div class="body"><div class="t">${x.t}</div>
+        <div class="libbtns" style="margin-top:8px">
+          <a class="btn" style="background:linear-gradient(135deg,#20808d,#1fb8a6);font-size:12px;padding:8px 12px" href="https://www.perplexity.ai/search?q=${P(x.p)}" target="_blank" rel="noopener">Perplexity ↗</a>
+          <a class="btn ghost" style="font-size:12px;padding:8px 12px" href="https://chatgpt.com/?q=${P(x.p)}" target="_blank" rel="noopener">ChatGPT ↗</a>
+          <a class="btn ghost" style="font-size:12px;padding:8px 12px" href="https://www.google.com/search?q=${P(x.p)}&udm=50" target="_blank" rel="noopener">Google AI ↗</a>
+        </div>
+      </div>
+    </div>`).join("");
+  return `<div class="card" style="border-color:var(--stroke-strong)">
+    <div class="head"><span class="eyebrow">AI Research Agent · scan competitors live</span><div class="spacer"></div><span class="src live"><span class="ld"></span>Free · your AI</span></div>
+    <p class="prose" style="font-size:13.5px;margin-bottom:14px">One click opens <b>Perplexity / ChatGPT / Google AI</b> pre-loaded with a deep, brand-specific research prompt. The AI scans the live web (ads, Reddit, Amazon, reviews) on <b>your own free account</b> and returns a cited answer — the genuinely-free way to auto-scan a competitor, no key, no scraper.</p>
+    <div style="display:flex;flex-direction:column;gap:10px">${cards}</div>
+  </div>`;
+}
+
 // ---------- MARKET RESEARCH ENGINE (the 5 websites) ----------
 export function research() {
   const R = D.research;
@@ -481,6 +518,7 @@ export function research() {
   const ext = (label, href, cls) => `<a class="btn ${cls}" href="${href}" target="_blank" rel="noopener">${label} ↗</a>`;
 
   return `<div class="page">
+    ${aiResearch()}
     <div class="card">
       <div class="head"><h3>Market Research Engine</h3><span class="sub">· the 5 sources a whole research team would cover</span>
         <div class="spacer"></div><span class="src live"><span class="ld"></span>2 live</span></div>
