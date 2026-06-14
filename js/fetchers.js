@@ -74,7 +74,7 @@ export async function fetchCWV(domain) {
   const out = { ok: false, perf: null, lcp: null, cls: null, inp: null, url };
   try {
     const api = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&category=performance&strategy=mobile`;
-    const r = await withTimeout(fetch(api), 14000);
+    const r = await withTimeout(fetch(api), 9000);
     if (r.ok) {
       const j = await r.json();
       const lr = j.lighthouseResult;
@@ -93,11 +93,10 @@ export async function fetchCWV(domain) {
 }
 
 // Fetch a cross-origin URL as text through a chain of free CORS proxies.
-async function fetchViaProxy(url, ms = 11000) {
+async function fetchViaProxy(url, ms = 8000) {
   const proxies = [
     (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
     (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    (u) => `https://thingproxy.freeboard.io/fetch/${u}`,
   ];
   for (const p of proxies) {
     try {
@@ -116,7 +115,7 @@ async function fetchViaProxy(url, ms = 11000) {
 export async function fetchGoogleSuggest(q) {
   const target = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(q)}`;
   try {
-    const t = await fetchViaProxy(target, 9000);
+    const t = await fetchViaProxy(target, 7000);
     if (t) {
       const arr = JSON.parse(t); // ["q", ["s1","s2",...]]
       const s = (arr[1] || []).slice(0, 10);
@@ -131,7 +130,7 @@ export async function fetchGoogleSuggest(q) {
 export async function fetchReddit(q) {
   const target = `https://www.reddit.com/search.json?q=${encodeURIComponent(q)}&limit=10&sort=relevance`;
   try {
-    const t = await fetchViaProxy(target, 12000);
+    const t = await fetchViaProxy(target, 7000);
     if (t) {
       const j = JSON.parse(t);
       const posts = (j.data?.children || [])
@@ -143,19 +142,32 @@ export async function fetchReddit(q) {
   return { ok: false, posts: [] };
 }
 
-// ---------- BEST-EFFORT HOMEPAGE META (via free CORS proxy) ----------
-export async function fetchHomepageMeta(domain) {
+// ---------- LIVE SITE SCRAPE (homepage, via proxy) ----------
+// Real per-brand intelligence: positioning, pricing, trust signals, value props.
+// This is the brand's OWN site — the one competitor surface a static app CAN read.
+export async function fetchSite(domain) {
   const url = `https://${cleanDomain(domain)}`;
-  const out = { ok: false, title: "", description: "", h1: "" };
+  const out = { ok: false, title: "", description: "", h1: "", props: [], prices: [], trust: [], url };
   try {
-    const r = await withTimeout(fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`), 10000);
-    if (r.ok) {
-      const { contents } = await r.json();
-      const doc = new DOMParser().parseFromString(contents, "text/html");
+    const html = await fetchViaProxy(url, 9000);
+    if (html) {
+      const doc = new DOMParser().parseFromString(html, "text/html");
       out.title = doc.querySelector("title")?.textContent?.trim() || "";
-      out.description = doc.querySelector('meta[name="description"]')?.content?.trim()
-        || doc.querySelector('meta[property="og:description"]')?.content?.trim() || "";
-      out.h1 = doc.querySelector("h1")?.textContent?.trim() || "";
+      out.description = (doc.querySelector('meta[name="description"]')?.getAttribute("content")
+        || doc.querySelector('meta[property="og:description"]')?.getAttribute("content") || "").trim();
+      out.h1 = doc.querySelector("h1")?.textContent?.replace(/\s+/g, " ").trim() || "";
+      out.props = [...doc.querySelectorAll("h2, h3")].map((h) => h.textContent.replace(/\s+/g, " ").trim())
+        .filter((t) => t && t.length > 6 && t.length < 80).slice(0, 6);
+      const text = (doc.body?.textContent || html);
+      out.prices = [...new Set((text.match(/₹\s?\d[\d,]{1,6}/g) || []).map((s) => s.replace(/\s/g, "")))].slice(0, 8);
+      const signals = {
+        "Dermatologist-backed": /derma(tolog)/i, "Clinically tested": /clinical/i,
+        "Reviews / ratings": /review|rating|★|stars?\b/i, "Money-back guarantee": /money.?back|guarantee|refund/i,
+        "Free / fast shipping": /free ship|free deliver|fast deliver/i, "No side-effects claim": /no side.?effect|side.?effect.?free/i,
+        "Made in India": /made in india/i, "Subscription": /subscri(be|ption)/i,
+        "Doctor / expert": /\bdoctor|gynaecolog|nutritionist|expert/i, "COD available": /cash on delivery|\bcod\b/i,
+      };
+      out.trust = Object.entries(signals).filter(([, re]) => re.test(text)).map(([k]) => k);
       out.ok = !!(out.title || out.description);
     }
   } catch (e) {}

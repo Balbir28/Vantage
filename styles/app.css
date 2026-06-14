@@ -386,6 +386,11 @@ body {
   background: rgba(255,178,62,0.10); border: 1px solid rgba(255,178,62,0.22); color: var(--text-dim); }
 .banner b { color: var(--text); }
 
+.topsearch { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 12px; background: var(--glass-2); border: 1px solid var(--stroke); min-width: 240px; transition: 0.2s var(--ease); }
+.topsearch:focus-within { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(31,184,166,0.15); }
+.topsearch .ts-ic { color: var(--text-faint); font-size: 16px; }
+.topsearch input { flex: 1; border: 0; background: transparent; color: var(--text); font-size: 13.5px; font-family: var(--font); outline: none; }
+.topsearch input::placeholder { color: var(--text-faint); }
 .brandpill { display: inline-flex; align-items: center; gap: 8px; padding: 5px 11px 5px 6px; border-radius: 11px; background: var(--glass-2); border: 1px solid var(--stroke); font-size: 13px; font-weight: 650; }
 .brandpill img { width: 22px; height: 22px; border-radius: 6px; object-fit: cover; background: var(--glass-hi); }
 

@@ -4,7 +4,7 @@
 //  fills STATE, drives a progress UI that mirrors the agent pipeline.
 // ============================================================
 import { STATE, saveState } from "./state.js";
-import { fetchEntity, fetchCWV, fetchHomepageMeta, fetchGoogleSuggest, fetchReddit, domainFromBrand, cleanDomain, logoUrl } from "./fetchers.js";
+import { fetchEntity, fetchCWV, fetchSite, fetchGoogleSuggest, fetchReddit, domainFromBrand, cleanDomain, logoUrl } from "./fetchers.js";
 import { indiaBrands, defaultIndiaSet } from "./data.js";
 
 // Auto-suggest realistic Indian competitors from the brand name.
@@ -51,7 +51,7 @@ export function progressHTML() {
       <h1 style="font-size:22px">Auditing <span id="p-brand" style="color:var(--teal)"></span></h1>
       <p class="muted" style="margin:6px 0 22px;font-size:13.5px">Agents are pulling live signals…</p>
       <div class="psteps">
-        ${step("entity", "Resolving entity & knowledge graph")}
+        ${step("entity", "Scraping live site + knowledge graph")}
         ${step("site", "Measuring site health (Core Web Vitals)")}
         ${step("comp", "Mapping Indian competitors")}
         ${step("research", "Mining customer voice & demand (Reddit · Google)")}
@@ -79,55 +79,56 @@ export async function runAudit(brand, site, compStr) {
   const pb = document.getElementById("p-brand");
   if (pb) pb.textContent = STATE.brand;
 
-  // 1) entity + identity
-  activate("entity");
-  const [entity, meta] = await Promise.all([fetchEntity(STATE.brand), fetchHomepageMeta(STATE.domain)]);
+  // Fire EVERY live fetch in parallel up front — total time ≈ the slowest one (~9s),
+  // not the sum. Each progress step resolves independently as its data lands.
+  activate("entity"); activate("site"); activate("comp"); activate("research");
+  const bn = STATE.brand, dom = STATE.domain;
+  const pEntity = fetchEntity(bn);
+  const pSite = fetchSite(dom);
+  const pCwv = fetchCWV(dom);
+  const pReddit = fetchReddit(`${bn} review`);
+  const pGoogle = Promise.all([fetchGoogleSuggest(`best ${bn}`), fetchGoogleSuggest(`${bn} `)]);
+
+  // entity + live site
+  const [entity, siteData] = await Promise.all([pEntity, pSite]);
   STATE.entity = entity;
-  STATE.description = entity.description || meta.title || "";
-  STATE.extract = entity.extract || meta.description || "";
-  mark("entity", entity.ok ? "done" : "warn", entity.ok ? `Wikidata ${entity.wikidataId || "—"} · ${entity.sitelinks} languages` : "no strong entity found");
+  STATE.site = siteData.ok ? siteData : null;
+  STATE.description = entity.description || siteData.title || "";
+  STATE.extract = entity.extract || siteData.description || "";
+  mark("entity", (entity.ok || siteData.ok) ? "done" : "warn",
+    entity.ok ? `Wikidata ${entity.wikidataId || "—"} · ${entity.sitelinks} langs` : siteData.ok ? `site read · ${siteData.trust.length} trust signals` : "no entity / site");
 
-  // 2) site health
-  activate("site");
-  const cwv = await fetchCWV(STATE.domain);
+  // site health
+  const cwv = await pCwv;
   STATE.cwv = cwv.ok ? cwv : null;
-  mark("site", cwv.ok ? "done" : "warn", cwv.ok ? `Perf ${cwv.perf} · LCP ${cwv.lcp}s` : "PageSpeed unavailable (rate-limited)");
+  mark("site", cwv.ok ? "done" : "warn", cwv.ok ? `Perf ${cwv.perf} · LCP ${cwv.lcp}s` : "PageSpeed rate-limited");
 
-  // 3) competitors — entered domains, else auto-mapped Indian rivals
-  activate("comp");
-  STATE.autoCompetitors = competitorsFor(STATE.brand);
+  // competitors — entered domains, else auto-mapped Indian rivals
+  STATE.autoCompetitors = competitorsFor(brand);
   const comps = compStr.split(",").map((s) => cleanDomain(s)).filter(Boolean).slice(0, 4);
   STATE.competitors = [];
   if (comps.length) {
-    const results = await Promise.all(comps.map(async (d) => {
+    STATE.competitors = await Promise.all(comps.map(async (d) => {
       const name = d.split(".")[0].replace(/^\w/, (c) => c.toUpperCase());
-      const [e, c] = await Promise.all([fetchEntity(name), fetchCWV(d)]);
-      return { name, domain: d, logo: logoUrl(d), entity: e, cwv: c.ok ? c : null };
+      const c = await fetchCWV(d);
+      return { name, domain: d, logo: logoUrl(d), entity: null, cwv: c.ok ? c : null };
     }));
-    STATE.competitors = results;
-    mark("comp", "done", `${results.length} benchmarked`);
+    mark("comp", "done", `${STATE.competitors.length} benchmarked`);
   } else {
     mark("comp", "done", `auto: ${STATE.autoCompetitors.slice(0, 3).join(", ")}…`);
   }
 
-  // 4) market research — live customer voice (Reddit) + demand (Google)
-  activate("research");
-  const cat = STATE.brand;
-  const [reddit, gWhy, gBest] = await Promise.all([
-    fetchReddit(`${cat} review`),
-    fetchGoogleSuggest(`why ${cat}`),
-    fetchGoogleSuggest(`best ${cat}`),
-  ]);
-  const google = [...(gBest.suggestions || []), ...(gWhy.suggestions || [])].slice(0, 10);
+  // market research — live demand (Google) + customer voice (Reddit)
+  const [reddit, gResults] = await Promise.all([pReddit, pGoogle]);
+  const google = [...(gResults[0].suggestions || []), ...(gResults[1].suggestions || [])]
+    .filter((v, i, a) => a.indexOf(v) === i).slice(0, 10);
   STATE.research = { reddit: reddit.ok ? reddit.posts : [], google };
   const liveBits = (reddit.ok ? 1 : 0) + (google.length ? 1 : 0);
-  mark("research", liveBits ? "done" : "warn", liveBits ? `${(STATE.research.reddit.length)} threads · ${google.length} queries` : "sources rate-limited");
+  mark("research", liveBits ? "done" : "warn", liveBits ? `${STATE.research.reddit.length} threads · ${google.length} queries` : "sources rate-limited");
 
-  // 5) synthesize
-  activate("synth");
-  await new Promise((r) => setTimeout(r, 500));
+  // synthesize
   mark("synth", "done");
   STATE.ran = true;
   saveState();
-  await new Promise((r) => setTimeout(r, 450));
+  await new Promise((r) => setTimeout(r, 400));
 }

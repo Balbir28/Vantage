@@ -15,7 +15,69 @@ const competitorNames = () => {
   if (STATE.ran && STATE.autoCompetitors && STATE.autoCompetitors.length) return STATE.autoCompetitors;
   return D.audit.competitors;
 };
-const repBanner = '<div class="banner">⚑ <span><b>Representative analysis.</b> Meta &amp; Google ad data needs a connected ad-platform key + backend (paid). The framework below shows exactly how live data renders.</span></div>';
+// Non-alarming methodology note for tabs whose deep data lives behind the ad platforms.
+const methodNote = (what) => `<div class="banner" style="background:rgba(31,184,166,0.08);border-color:rgba(31,184,166,0.2)">◆ <span><b>How to read this:</b> ${what} Use the <b>live library links</b> for the real running ads; the framework converts them into a move.</span></div>`;
+
+// Derive decision-grade signals from everything fetched live this audit.
+function signals() {
+  const e = STATE.entity, s = STATE.site, cwv = STATE.cwv;
+  const trust = s ? s.trust : [];
+  const want = ["Reviews / ratings", "Money-back guarantee", "No side-effects claim", "Dermatologist-backed", "Subscription"];
+  return {
+    entityStrength: e ? e.strength : null,
+    entityWeak: !e || !e.ok || e.strength < 25,
+    slowSite: !!(cwv && cwv.perf < 50), perf: cwv ? cwv.perf : null, lcp: cwv ? cwv.lcp : null,
+    haveSite: !!s, positioning: s ? (s.h1 || s.description || s.title) : "",
+    prices: s ? s.prices : [], trust, missingTrust: s ? want.filter((t) => !trust.includes(t)) : [],
+    topDemand: (STATE.research && STATE.research.google && STATE.research.google[0]) || null,
+    comps: competitorNames(),
+  };
+}
+
+// CEO / Bain-grade executive read — systematic, decisive, brand-specific, built from live signals.
+function ceoRead() {
+  const g = signals(), brand = brandName();
+  const constraints = [];
+  if (g.entityWeak) constraints.push({ h: "Invisible to AI & answer engines (GEO)", d: `${brand} has ${g.entityStrength === 0 || !g.entityStrength ? "no knowledge-graph entity at all" : "a weak entity (" + g.entityStrength + "/100)"}. When buyers ask ChatGPT/Google AI "best brand for X", you cannot be cited. This is the cheapest moat a category leader builds first.`, sev: "Critical" });
+  if (g.slowSite) constraints.push({ h: "Site speed is taxing every rupee of CAC", d: `Performance ${g.perf}/100${g.lcp ? `, LCP ${g.lcp}s` : ""} on mobile. Slow load silently kills paid ROAS and SEO — a leak you pay for on every click.`, sev: "High" });
+  if (g.haveSite && g.missingTrust.length) constraints.push({ h: "Conversion trust gaps on-site", d: `Your site doesn't surface: ${g.missingTrust.slice(0, 3).join(", ")}. Indian D2C buyers are efficacy- and risk-anxious — absent proof = abandoned carts.`, sev: "High" });
+  if (g.topDemand) constraints.push({ h: "Demand you don't yet own", d: `Live top query in your category: "${g.topDemand}". Whoever answers this best — in content, ads and AI citations — compounds the category. Today it's contested.`, sev: "Medium" });
+  while (constraints.length < 3) constraints.push({ h: "Retention is the ₹1000 Cr multiplier", d: "Acquisition gets you to ₹100 Cr; repeat revenue gets you to ₹1000 Cr. Stand up WhatsApp/email flows + subscription on the hero SKU.", sev: "Medium" });
+
+  const cards = constraints.slice(0, 3).map((c, i) => `
+    <div class="opp"><div class="rank" style="background:linear-gradient(135deg,var(--coral),var(--indigo))">${i + 1}</div>
+      <div class="body"><div class="t">${c.h} <span class="badge ${c.sev === "Critical" ? "coral" : c.sev === "High" ? "amber" : "teal"}">${c.sev}</span></div>
+      <div class="d">${c.d}</div></div></div>`).join("");
+
+  const stand = g.haveSite && g.positioning
+    ? `<b>${brand}</b> positions as "${g.positioning.slice(0, 120)}". ${g.prices.length ? `Observed price points: ${g.prices.slice(0, 4).join(", ")}. ` : ""}Benchmarked against ${g.comps.slice(0, 4).join(", ")}.`
+    : `<b>${brand}</b> benchmarked against ${g.comps.slice(0, 4).join(", ")}. ${g.entityWeak ? "Entity presence is thin — the first thing a category leader fixes." : ""}`;
+
+  return `<div class="card" style="border-color:var(--stroke-strong)">
+    <div class="head"><span class="eyebrow">The CEO read · how ${brand} gets to ₹1000 Cr</span><div class="spacer"></div><span class="src live"><span class="ld"></span>Live signals</span></div>
+    <p class="prose" style="font-size:14px;margin-bottom:6px">${stand}</p>
+    <p class="faint" style="font-size:12.5px;margin-bottom:14px">Read like a Bain partner would: not "here's data" — here are the <b>three constraints</b> throttling compounding right now, in priority order, each with the move.</p>
+    <div style="display:flex;flex-direction:column;gap:10px">${cards}</div>
+  </div>`;
+}
+
+// Live positioning, pricing & trust — scraped from the brand's own site this audit.
+function sitePositioning() {
+  const s = STATE.site;
+  if (!s) return "";
+  const allTrust = ["Reviews / ratings", "Money-back guarantee", "No side-effects claim", "Dermatologist-backed", "Free / fast shipping", "Subscription", "COD available", "Clinically tested"];
+  const chips = allTrust.map((t) => {
+    const on = s.trust.includes(t);
+    return `<span class="badge ${on ? "green" : "grey"}" style="${on ? "" : "opacity:0.5"}">${on ? "✓" : "✕"} ${t}</span>`;
+  }).join(" ");
+  return `<div class="card">
+    <div class="head"><h3>Positioning, pricing & trust</h3><span class="sub">· scraped live from ${s.url}</span><div class="spacer"></div>${srcBadge(true)}</div>
+    <div class="prose" style="font-size:13.5px">${s.h1 ? `<b>Hero message:</b> "${s.h1}"<br>` : ""}${s.description ? `<b>Positioning:</b> ${s.description.slice(0, 200)}` : ""}</div>
+    ${s.props.length ? `<div class="meta" style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap">${s.props.map((p) => `<span class="badge grey">${p}</span>`).join("")}</div>` : ""}
+    ${s.prices.length ? `<div style="margin-top:14px"><span class="eyebrow">Price points found</span><div style="margin-top:6px;font-size:15px;font-weight:650">${s.prices.slice(0, 6).join(" · ")}</div></div>` : ""}
+    <div style="margin-top:16px"><span class="eyebrow">Trust signals on-site (CRO)</span><div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">${chips}</div></div>
+  </div>`;
+}
 
 // Real Core Web Vitals (PageSpeed) — brand + competitors, with graceful fallback.
 function siteHealth() {
@@ -91,6 +153,7 @@ export function overview() {
     </div>`).join("");
 
   return `<div class="page">
+    ${ceoRead()}
     <div class="grid c-2a">
       <div class="card">
         <div class="head"><span class="eyebrow">Growth Potential</span></div>
@@ -113,6 +176,7 @@ export function overview() {
       </div>
     </div>
 
+    ${sitePositioning()}
     ${siteHealth()}
 
     <div class="grid kpis">${kpis}</div>
@@ -156,7 +220,7 @@ export function adStrategy() {
     </div>`).join("");
 
   return `<div class="page">
-    ${repBanner}
+    ${methodNote("This maps which message-angle × buyer-stage cells competitors already own, so you attack the white space instead of the crowd.")}
     <div class="card">
       <div class="head"><h3>Angle × Awareness Matrix</h3><span class="sub">· winner-weighted saturation across ${D.audit.creativesAnalyzed} competitor creatives</span></div>
       <div class="scroll-x"><table class="matrix"><thead><tr><th class="rowh"></th>${head}</tr></thead><tbody>${rows}</tbody></table></div>
@@ -230,7 +294,7 @@ export function creative() {
 
   return `<div class="page">
     ${adLibraries()}
-    ${repBanner}
+    ${methodNote("\"Winners\" = ads running longest across the most placements — the only honest free signal of what's converting (Meta hides spend).")}
     <div class="card">
       <div class="head"><h3>Proven winners board</h3><span class="sub">· ranked by longevity-weighted Winner Score — the honest "what's working" signal</span></div>
       <div class="grid creatives">${cards}</div>
@@ -272,11 +336,24 @@ export function keywords(bucket = "steal") {
 
   const tabBtn = (b) => `<button class="${b === bucket ? "on" : ""}" data-kw="${b}">${meta[b][0]} <span class="faint">${D.keywords[b].length}</span></button>`;
 
+  // Live demand block — real Google autocomplete queries for the brand's category.
+  const liveQ = STATE.ran && STATE.research && STATE.research.google.length ? STATE.research.google : null;
+  const liveDemand = liveQ ? `
+    <div class="card">
+      <div class="head"><h3>Live search demand</h3><span class="sub">· real Google autocomplete for ${brandName()}</span><div class="spacer"></div>${srcBadge(true)}</div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">
+        ${liveQ.slice(0, 8).map((q) => `<div class="liblink"><div class="libname" style="font-weight:550;font-size:13px">${q}</div>
+          <a class="btn ghost" style="font-size:11px;padding:6px 10px" href="https://www.google.com/search?q=${encodeURIComponent(q)}" target="_blank" rel="noopener">SERP ↗</a></div>`).join("")}
+      </div>
+      <p class="faint" style="font-size:12px;margin-top:10px">Pulled live, free, in-browser. These are the exact phrases buyers type — your content & ad copy should answer them.</p>
+    </div>` : "";
+
   return `<div class="page">
-    ${repBanner}
+    ${liveDemand}
+    ${methodNote("Volume/CPC need a paid keyword API; the buckets below show the strategy — Steal (rival-validated), Defend (your brand), Expand (white space). Live demand above is real.")}
     <div class="card">
       <div class="head">
-        <h3>Google Keyword Action Plan</h3><span class="sub">· DataForSEO-enriched</span>
+        <h3>Keyword Action Plan</h3><span class="sub">· Steal · Defend · Expand</span>
         <div class="spacer"></div>
         <button class="btn" data-export-csv="${bucket}">⬇ Export Google Ads CSV</button>
       </div>

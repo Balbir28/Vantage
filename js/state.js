@@ -16,6 +16,7 @@ export const STATE = {
   competitors: [],       // [{ name, domain, entity, cwv }]
   autoCompetitors: [],   // [names] auto-suggested from the India brand map
   research: null,        // { reddit:[], google:[] } live market-research signals
+  site: null,            // { title, description, h1, props, prices, trust } live homepage scrape
 };
 
 const KEY = "vantage-audit";
@@ -33,5 +34,5 @@ export function loadState() {
 }
 export function resetState() {
   try { localStorage.removeItem(KEY); } catch (e) {}
-  Object.assign(STATE, { ran: false, brand: "", domain: "", logo: "", description: "", extract: "", entity: null, cwv: null, competitors: [], autoCompetitors: [], research: null });
+  Object.assign(STATE, { ran: false, brand: "", domain: "", logo: "", description: "", extract: "", entity: null, cwv: null, competitors: [], autoCompetitors: [], research: null, site: null });
 }

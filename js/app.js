@@ -142,6 +142,20 @@ function wireEvents() {
     if (csv) exportCSV(csv.dataset.exportCsv);
   });
   $("new-audit").addEventListener("click", () => { resetState(); showOnboard(); });
+
+  // seamless top-bar brand search → run a fresh audit inline
+  $("brand-search").addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter") return;
+    const brand = e.target.value.trim();
+    if (!brand) return;
+    e.target.value = "";
+    $("onboard-root").innerHTML = progressHTML();
+    $("onboard-root").style.display = "block";
+    document.querySelector(".app").style.display = "none";
+    if ($("p-brand")) $("p-brand").textContent = brand;
+    await runAudit(brand, "", "");
+    showApp();
+  });
   document.querySelectorAll(".themeToggle button").forEach((b) => {
     b.addEventListener("click", () => {
       document.documentElement.setAttribute("data-theme", b.dataset.theme);
