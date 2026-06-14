@@ -6,6 +6,7 @@
 import { STATE, saveState } from "./state.js";
 import { fetchEntity, fetchCWV, fetchSite, fetchGoogleSuggest, fetchReddit, domainFromBrand, cleanDomain, logoUrl } from "./fetchers.js";
 import { indiaBrands, defaultIndiaSet } from "./data.js";
+import { hasKey, geminiResearch } from "./gemini.js";
 
 // Auto-suggest realistic Indian competitors from the brand name.
 export function competitorsFor(brand) {
@@ -55,6 +56,7 @@ export function progressHTML() {
         ${step("site", "Measuring site health (Core Web Vitals)")}
         ${step("comp", "Mapping Indian competitors")}
         ${step("research", "Mining customer voice & demand (Reddit · Google)")}
+        ${hasKey() ? step("ai", "Deep AI research (Gemini · grounded search)") : ""}
         ${step("synth", "Synthesizing strategy")}
       </div>
     </div>
@@ -125,6 +127,16 @@ export async function runAudit(brand, site, compStr) {
   STATE.research = { reddit: reddit.ok ? reddit.posts : [], google };
   const liveBits = (reddit.ok ? 1 : 0) + (google.length ? 1 : 0);
   mark("research", liveBits ? "done" : "warn", liveBits ? `${STATE.research.reddit.length} threads · ${google.length} queries` : "sources rate-limited");
+
+  // deep AI research (only if a Gemini key is configured)
+  STATE.ai = null; STATE.aiError = null;
+  if (hasKey()) {
+    activate("ai");
+    const comps = STATE.competitors.length ? STATE.competitors.map((c) => c.name) : STATE.autoCompetitors;
+    const r = await geminiResearch(STATE.brand, STATE.domain, comps);
+    if (r.ok) { STATE.ai = r.data; mark("ai", "done", "real per-brand analysis ready"); }
+    else { STATE.aiError = r.error; mark("ai", "warn", (r.error || "failed").slice(0, 40)); }
+  }
 
   // synthesize
   mark("synth", "done");

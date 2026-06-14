@@ -17,6 +17,8 @@ export const STATE = {
   autoCompetitors: [],   // [names] auto-suggested from the India brand map
   research: null,        // { reddit:[], google:[] } live market-research signals
   site: null,            // { title, description, h1, props, prices, trust } live homepage scrape
+  ai: null,              // Gemini deep-research result (when a key is configured)
+  aiError: null,         // last Gemini error message (shown in UI)
 };
 
 const KEY = "vantage-audit";
@@ -34,5 +36,5 @@ export function loadState() {
 }
 export function resetState() {
   try { localStorage.removeItem(KEY); } catch (e) {}
-  Object.assign(STATE, { ran: false, brand: "", domain: "", logo: "", description: "", extract: "", entity: null, cwv: null, competitors: [], autoCompetitors: [], research: null, site: null });
+  Object.assign(STATE, { ran: false, brand: "", domain: "", logo: "", description: "", extract: "", entity: null, cwv: null, competitors: [], autoCompetitors: [], research: null, site: null, ai: null, aiError: null });
 }

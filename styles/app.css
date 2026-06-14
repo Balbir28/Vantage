@@ -373,6 +373,16 @@ body {
 .pdot { width: 17px; height: 17px; border-radius: 50%; display: grid; place-items: center; font-size: 10px; font-weight: 800; flex-shrink: 0; color: #fff; }
 .pdot.done { background: var(--green); } .pdot.warn { background: var(--amber); }
 
+/* ---------- SETTINGS MODAL ---------- */
+.modal-bg { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px;
+  background: rgba(0,0,0,0.45); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); animation: rise 0.3s var(--ease); }
+.modal { width: 100%; max-width: 480px; padding: 26px 28px; }
+.modal-x { background: var(--glass-2); border: 1px solid var(--stroke); color: var(--text-dim); width: 30px; height: 30px; border-radius: 9px; cursor: pointer; font-size: 13px; }
+.modal-x:hover { color: var(--text); }
+.fld select { width: 100%; padding: 12px 14px; border-radius: 13px; font-size: 14px; font-family: var(--font);
+  background: var(--glass-2); border: 1px solid var(--stroke); color: var(--text); outline: none; cursor: pointer; }
+.fld select:focus { border-color: var(--teal); }
+
 /* live/demo source badges */
 .src { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; padding: 3px 8px; border-radius: 7px; }
 .src.live { background: rgba(52,211,153,0.16); color: #4fe0b0; }

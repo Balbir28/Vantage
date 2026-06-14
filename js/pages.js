@@ -4,6 +4,10 @@
 import * as D from "./data.js";
 import { ring, miniGauge, bar } from "./ui.js";
 import { STATE } from "./state.js";
+import { hasKey } from "./gemini.js";
+
+// Small prompt shown on AI-powered surfaces when no Gemini key is configured.
+const aiGate = (what) => `<div class="banner" style="background:rgba(106,123,255,0.08);border-color:rgba(106,123,255,0.25)">✦ <span><b>Deep AI research is off.</b> ${what} Add your free Google Gemini key in <b>Settings</b> (top-right ⚙) to fetch real, grounded, per-brand analysis.</span></div>`;
 
 const tags = (arr) => arr.map((t) => `<span class="badge grey">${t}</span>`).join("");
 const srcBadge = (live) => live
@@ -53,10 +57,12 @@ function ceoRead() {
     ? `<b>${brand}</b> positions as "${g.positioning.slice(0, 120)}". ${g.prices.length ? `Observed price points: ${g.prices.slice(0, 4).join(", ")}. ` : ""}Benchmarked against ${g.comps.slice(0, 4).join(", ")}.`
     : `<b>${brand}</b> benchmarked against ${g.comps.slice(0, 4).join(", ")}. ${g.entityWeak ? "Entity presence is thin — the first thing a category leader fixes." : ""}`;
 
+  const ai = STATE.ai;
   return `<div class="card" style="border-color:var(--stroke-strong)">
-    <div class="head"><span class="eyebrow">The CEO read · how ${brand} gets to ₹1000 Cr</span><div class="spacer"></div><span class="src live"><span class="ld"></span>Live signals</span></div>
-    <p class="prose" style="font-size:14px;margin-bottom:6px">${stand}</p>
-    <p class="faint" style="font-size:12.5px;margin-bottom:14px">Read like a Bain partner would: not "here's data" — here are the <b>three constraints</b> throttling compounding right now, in priority order, each with the move.</p>
+    <div class="head"><span class="eyebrow">The CEO read · how ${brand} gets to ₹1000 Cr</span><div class="spacer"></div><span class="src live"><span class="ld"></span>${ai ? "Gemini · grounded" : "Live signals"}</span></div>
+    <p class="prose" style="font-size:14px;margin-bottom:6px">${ai && ai.summary ? ai.summary : stand}</p>
+    ${ai && ai.thousandCr ? `<div class="banner" style="margin:10px 0 4px;background:rgba(31,184,166,0.08);border-color:rgba(31,184,166,0.25)">🏆 <span><b>The ₹1000 Cr move:</b> ${ai.thousandCr}</span></div>` : ""}
+    <p class="faint" style="font-size:12.5px;margin:10px 0 14px">Read like a Bain partner would: not "here's data" — here are the <b>three constraints</b> throttling compounding right now, in priority order, each with the move.${ai ? " See the full <b>Summary Report</b> tab." : ""}</p>
     <div style="display:flex;flex-direction:column;gap:10px">${cards}</div>
   </div>`;
 }
@@ -392,16 +398,26 @@ export function aeo() {
       <div class="subscore" style="grid-template-columns:1fr auto"><div class="nm">Language editions</div><div class="val">${e.sitelinks}</div></div>
     </div>` : "";
 
+  const ai = STATE.ai;
+  const aeoScore = ai && ai.aeo && Number.isFinite(ai.aeo.score) ? ai.aeo.score : disc;
+  const aeoProse = ai && ai.aeo && ai.aeo.finding
+    ? ai.aeo.finding
+    : `<b>Entity strength</b> — how present ${brandName()} is in the knowledge graph answer engines cite. ${e ? (e.wiki ? "You have a graph foothold; deepen citations to convert it into answer share." : "No strong entity found — the single biggest AEO blocker. Establish the entity first.") : "Competitors are cited ~4× more on core queries."}`;
+  const aeoRecs = ai && ai.aeo && ai.aeo.recs && ai.aeo.recs.length
+    ? ai.aeo.recs.map((r) => `<div class="opp"><div class="rank" style="background:linear-gradient(135deg,var(--indigo),var(--violet))">✦</div><div class="body"><div class="d" style="font-size:13.5px;color:var(--text)">${r}</div></div></div>`).join("")
+    : recs;
+
   return `<div class="page">
+    ${!hasKey() ? aiGate("AEO scoring here uses your live entity strength only.") : ""}
     <div class="grid c-2e">
       <div class="card">
-        <div class="head"><span class="eyebrow">AI Discoverability</span><div class="spacer"></div>${srcBadge(!!e)}</div>
-        <div class="ring-wrap">${ring(disc, { label: "/ 100" })}
-          <div class="prose" style="font-size:13px"><b>Entity strength</b> — how present ${brandName()} is in the knowledge graph answer engines are trained on and cite. ${e ? (e.wiki ? "You have a graph foothold; deepen citations to convert it into answer share." : "No strong entity found — the single biggest AEO blocker. Establish the entity first.") : "Competitors are cited ~4× more on core queries."}</div></div>
+        <div class="head"><span class="eyebrow">AEO · answer-engine visibility</span><div class="spacer"></div>${srcBadge(!!(ai && ai.aeo) || !!e)}</div>
+        <div class="ring-wrap">${ring(aeoScore, { label: "/ 100" })}
+          <div class="prose" style="font-size:13px">${aeoProse}</div></div>
         ${entityFacts}
       </div>
       <div class="card">
-        <div class="head"><h3>Share-of-voice by engine</h3><span class="sub">· you vs competitor set</span></div>
+        <div class="head"><h3>Share-of-voice in AI Overviews</h3><span class="sub">· you vs competitor set</span></div>
         <div class="grid gauge-grid" style="gap:12px">${gauges}</div>
       </div>
     </div>
@@ -411,48 +427,113 @@ export function aeo() {
         <table class="tbl"><thead><tr><th>Source</th><th>Who gets cited</th><th>You</th></tr></thead><tbody>${cites}</tbody></table>
       </div>
       <div class="card">
-        <div class="head"><h3>Visibility recommendations</h3></div>
-        <div style="display:flex;flex-direction:column;gap:9px">${recs}</div>
+        <div class="head"><h3>AEO recommendations</h3>${ai && ai.aeo ? srcBadge(true) : ""}</div>
+        <div style="display:flex;flex-direction:column;gap:9px">${aeoRecs}</div>
       </div>
     </div>
-
-    ${geoSection()}
   </div>`;
 }
 
-// GEO depth — generative-engine optimisation levers + live "ask the engines" links.
-function geoSection() {
-  const G = D.geo;
+// ---------- GEO — generative-engine optimisation (own tab) ----------
+export function geo() {
+  const G = D.geo, ai = STATE.ai;
+  const q = (s) => encodeURIComponent(s);
   const levers = G.levers.map((l) => `
     <div class="opp">
       <div class="rank" style="background:linear-gradient(135deg,var(--indigo),var(--violet))">${l.live ? "●" : "○"}</div>
       <div class="body"><div class="t" style="font-size:14px">${l.nm} ${srcBadge(l.live)}</div><div class="d">${l.d}</div></div>
     </div>`).join("");
-  const q = (s) => encodeURIComponent(s);
   const promptRows = G.prompts.map((p) => `
     <div class="liblink">
       <div class="libname">"${p}"</div>
       <div class="libbtns">
         <a class="btn ghost" href="https://www.perplexity.ai/search?q=${q(p)}" target="_blank" rel="noopener">Perplexity ↗</a>
         <a class="btn ghost" href="https://chatgpt.com/?q=${q(p)}" target="_blank" rel="noopener">ChatGPT ↗</a>
-        <a class="btn ghost" href="https://www.google.com/search?q=${q(p)}" target="_blank" rel="noopener">AI Overview ↗</a>
+        <a class="btn ghost" href="https://www.google.com/search?q=${q(p)}&udm=50" target="_blank" rel="noopener">Google AI ↗</a>
       </div>
     </div>`).join("");
-  return `<div class="card">
-      <div class="head"><h3>AEO vs GEO — the generative layer</h3><span class="sub">· being the answer & the citation</span></div>
-      <p class="prose" style="font-size:13.5px;margin-bottom:14px">${G.explainer}</p>
-      <div class="grid c-2c">
-        <div>
-          <div class="eyebrow" style="margin-bottom:10px">The 4 levers</div>
-          <div style="display:flex;flex-direction:column;gap:9px">${levers}</div>
-        </div>
-        <div>
-          <div class="eyebrow" style="margin-bottom:10px">Audit your own visibility — ask the engines</div>
-          ${promptRows}
-          <p class="faint" style="font-size:11.5px;margin-top:8px">Run these in each engine and note if ${brandName()} appears. Live in-app probing of every engine needs their APIs (paid) — these one-click checks are the free path.</p>
-        </div>
+  const geoScore = ai && ai.geo && Number.isFinite(ai.geo.score) ? ai.geo.score : (STATE.entity ? STATE.entity.strength : D.aeo.discoverability);
+  const geoFinding = ai && ai.geo && ai.geo.finding ? ai.geo.finding : "How often generative engines (ChatGPT, Gemini, Perplexity) cite you when synthesising a recommendation. Won the same way as AEO: strong entity + citable assets + third-party presence.";
+  const geoRecs = ai && ai.geo && ai.geo.recs && ai.geo.recs.length
+    ? `<div class="card"><div class="head"><h3>GEO recommendations</h3>${srcBadge(true)}</div><div style="display:flex;flex-direction:column;gap:9px">${ai.geo.recs.map((r) => `<div class="opp"><div class="rank" style="background:linear-gradient(135deg,var(--indigo),var(--violet))">✦</div><div class="body"><div class="d" style="font-size:13.5px;color:var(--text)">${r}</div></div></div>`).join("")}</div></div>` : "";
+
+  return `<div class="page">
+    ${!hasKey() ? aiGate("GEO scoring & citation analysis come from Gemini's grounded search.") : ""}
+    <div class="grid c-2e">
+      <div class="card">
+        <div class="head"><span class="eyebrow">GEO · generative-engine citation</span><div class="spacer"></div>${srcBadge(!!(ai && ai.geo))}</div>
+        <div class="ring-wrap">${ring(geoScore, { label: "/ 100" })}
+          <div class="prose" style="font-size:13px">${geoFinding}</div></div>
       </div>
-    </div>`;
+      <div class="card">
+        <div class="head"><h3>What AEO & GEO mean</h3></div>
+        <p class="prose" style="font-size:13px">${G.explainer}</p>
+      </div>
+    </div>
+    <div class="card">
+      <div class="head"><h3>The 4 levers that win citations</h3></div>
+      <div class="grid c-2c"><div style="display:flex;flex-direction:column;gap:9px">${levers}</div>
+        <div><div class="eyebrow" style="margin-bottom:10px">Audit your visibility — ask the engines</div>${promptRows}
+        <p class="faint" style="font-size:11.5px;margin-top:8px">One click runs the check in each engine — note whether ${brandName()} appears.</p></div></div>
+    </div>
+    ${geoRecs}
+  </div>`;
+}
+
+// ---------- SUMMARY REPORT — Gemini deep-research, in-dashboard ----------
+export function report() {
+  const ai = STATE.ai;
+  if (!ai) {
+    return `<div class="page">
+      ${aiGate("This is where your full grounded research report appears.")}
+      <div class="card"><div class="head"><span class="eyebrow">Summary Report</span></div>
+        <p class="prose">Add a Google Gemini API key in <b>Settings (⚙)</b> and run an audit. Gemini will research ${brandName()} and its competitors live — websites, Meta Ad Library, Google Transparency, Reddit, Amazon — and a full executive report renders right here. ${STATE.aiError ? `<br><br><span class="flag">⚑ Last error: ${STATE.aiError}</span>` : ""}</p>
+      </div></div>`;
+  }
+  const opp = (ai.opportunities || []).map((o, i) => `
+    <div class="opp"><div class="rank">${i + 1}</div><div class="body"><div class="t">${o.title}</div>
+      <div class="d">${o.action || ""}</div><div class="meta"><span class="badge teal">Impact ${o.impact || "—"}</span><span class="badge green">Effort ${o.effort || "—"}</span></div></div></div>`).join("");
+  const comps = (ai.competitors || []).map((c) => `
+    <tr><td class="kw">${c.name}</td><td>${c.positioning || ""}</td><td style="color:var(--green)">${c.edge || ""}</td><td style="color:var(--coral)">${c.gap || ""}</td></tr>`).join("");
+  const list = (arr) => (arr || []).map((x) => `<li>${typeof x === "string" ? x : (x.theme || x.title || JSON.stringify(x))}</li>`).join("");
+  const sources = ai._sources && ai._sources.length ? `<p class="faint" style="font-size:11.5px;margin-top:14px">Grounded sources: ${ai._sources.join(" · ")}</p>` : "";
+
+  return `<div class="page">
+    <div class="card" style="border-color:var(--stroke-strong)">
+      <div class="head"><span class="eyebrow">Executive Summary · ${brandName()}</span><div class="spacer"></div><span class="src live"><span class="ld"></span>Gemini · grounded</span></div>
+      <p class="prose" style="font-size:14.5px">${ai.summary || ""}</p>
+      ${ai.thousandCr ? `<div class="banner" style="margin-top:14px;background:rgba(31,184,166,0.08);border-color:rgba(31,184,166,0.25)">🏆 <span><b>The ₹1000 Cr move:</b> ${ai.thousandCr}</span></div>` : ""}
+      ${sources}
+    </div>
+
+    <div class="grid c-2b">
+      <div class="card"><div class="head"><h3>Top opportunities</h3></div><div style="display:flex;flex-direction:column;gap:10px">${opp || "<p class='faint'>—</p>"}</div></div>
+      <div class="card"><div class="head"><h3>Positioning & pricing</h3></div>
+        <p class="prose" style="font-size:13.5px"><b>Category:</b> ${ai.category || "—"}<br><b>Positioning:</b> ${ai.positioning || "—"}<br><b>Pricing:</b> ${ai.pricing || "—"}</p>
+        ${ai.transparency ? `<div style="margin-top:12px"><span class="eyebrow">Ad-spend signal</span><p class="prose" style="font-size:13px;margin-top:6px">${ai.transparency}</p></div>` : ""}
+      </div>
+    </div>
+
+    <div class="card"><div class="head"><h3>Competitor teardown</h3></div>
+      <div class="scroll-x"><table class="tbl"><thead><tr><th>Competitor</th><th>Positioning</th><th>Their edge</th><th>Exploitable gap</th></tr></thead><tbody>${comps || ""}</tbody></table></div>
+    </div>
+
+    <div class="grid c-2c">
+      <div class="card"><div class="head"><h3>Live ad angles & white space</h3></div>
+        <div class="eyebrow" style="margin:4px 0 6px">Running now</div><ul class="prose" style="font-size:13px">${list(ai.ads && ai.ads.runningAngles)}</ul>
+        <div class="eyebrow" style="margin:12px 0 6px">White space (your opening)</div><ul class="prose" style="font-size:13px;color:var(--teal)">${list(ai.ads && ai.ads.whitespace)}</ul></div>
+      <div class="card"><div class="head"><h3>Customer complaints (Reddit · Amazon)</h3></div>
+        <ul class="prose" style="font-size:13px">${list(ai.complaints)}</ul></div>
+    </div>
+
+    <div class="card"><div class="head"><h3>Action plan</h3><span class="sub">· sequenced</span></div>
+      <div class="tl">
+        <div class="ph"><h4>Next 30 days <span class="badge teal">Quick wins</span></h4><ul>${list(ai.plan && ai.plan.d30)}</ul></div>
+        <div class="ph"><h4>Next 90 days <span class="badge teal">Compounding</span></h4><ul>${list(ai.plan && ai.plan.d90)}</ul></div>
+        <div class="ph"><h4>Next 12 months <span class="badge teal">Strategic</span></h4><ul>${list(ai.plan && ai.plan.d365)}</ul></div>
+      </div>
+    </div>
+  </div>`;
 }
 
 // AI Research Agent — one click opens an answer engine pre-loaded with a deep,
@@ -622,11 +703,12 @@ export function strategist() {
 
 export const PAGES = {
   overview: { fn: overview, title: "Executive Overview", sub: "Strategic growth audit" },
+  report: { fn: report, title: "Summary Report", sub: "Gemini deep-research executive report" },
   research: { fn: research, title: "Market Research", sub: "Reddit · Amazon · YouTube · Google · Instagram" },
   adstrategy: { fn: adStrategy, title: "Ad Strategy", sub: "Angle × Awareness intelligence" },
   creative: { fn: creative, title: "Creative Intelligence", sub: "Meta ad library teardown" },
-  keywords: { fn: keywords, title: "Keyword Action Plan", sub: "Google paid-search strategy" },
-  aeo: { fn: aeo, title: "AEO & GEO", sub: "Answer & generative-engine visibility" },
+  aeo: { fn: aeo, title: "AEO", sub: "Answer-engine visibility" },
+  geo: { fn: geo, title: "GEO", sub: "Generative-engine citation" },
   strategist: { fn: strategist, title: "Growth Strategist", sub: "Synthesised action plan" },
   playbook: { fn: playbook, title: "Playbook & Guide", sub: "How to use · the 1000 Cr framework" },
 };

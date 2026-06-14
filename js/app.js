@@ -8,18 +8,22 @@ import { icons } from "./ui.js";
 import { STATE, loadState, resetState } from "./state.js";
 import { onboardingHTML, progressHTML, runAudit } from "./onboarding.js";
 import { domainFromBrand } from "./fetchers.js";
+import { getKey, setKey, getModel, setModel, testKey } from "./gemini.js";
 
 const NAV = [
   { sec: "Overview", items: [
     ["overview", "Executive Overview", icons.exec],
+    ["report", "Summary Report", icons.brain],
     ["research", "Market Research", icons.search],
   ]},
   { sec: "Paid Media", items: [
     ["adstrategy", "Ad Strategy", icons.ads],
     ["creative", "Creative Intelligence", icons.grid],
-    ["keywords", "Keyword Plan", icons.search],
   ]},
-  { sec: "Organic & AI", items: [["aeo", "AEO & GEO", icons.spark]] },
+  { sec: "Organic & AI", items: [
+    ["aeo", "AEO", icons.spark],
+    ["geo", "GEO", icons.spark],
+  ]},
   { sec: "Synthesis", items: [
     ["strategist", "Growth Strategist", icons.brain],
     ["playbook", "Playbook & Guide", icons.brain],
@@ -142,6 +146,29 @@ function wireEvents() {
     if (csv) exportCSV(csv.dataset.exportCsv);
   });
   $("new-audit").addEventListener("click", () => { resetState(); showOnboard(); });
+
+  // settings modal (Gemini key)
+  const openSettings = () => {
+    $("gemini-key").value = getKey();
+    $("gemini-model").value = getModel();
+    $("settings-status").textContent = "";
+    $("settings-modal").style.display = "grid";
+  };
+  $("open-settings").addEventListener("click", openSettings);
+  $("close-settings").addEventListener("click", () => { $("settings-modal").style.display = "none"; });
+  $("settings-modal").addEventListener("click", (e) => { if (e.target.id === "settings-modal") $("settings-modal").style.display = "none"; });
+  $("save-settings").addEventListener("click", () => {
+    setKey($("gemini-key").value); setModel($("gemini-model").value);
+    $("settings-status").innerHTML = '<span style="color:var(--green)">✓ Saved. Run a new audit to use it.</span>';
+  });
+  $("test-settings").addEventListener("click", async () => {
+    setModel($("gemini-model").value);
+    $("settings-status").textContent = "Testing…";
+    const r = await testKey($("gemini-key").value);
+    $("settings-status").innerHTML = r.ok
+      ? '<span style="color:var(--green)">✓ Key works</span>'
+      : `<span style="color:var(--coral)">✕ ${(r.error || "failed").slice(0, 60)}</span>`;
+  });
 
   // seamless top-bar brand search → run a fresh audit inline
   $("brand-search").addEventListener("keydown", async (e) => {
