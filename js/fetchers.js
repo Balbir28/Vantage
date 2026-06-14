@@ -92,6 +92,57 @@ export async function fetchCWV(domain) {
   return out;
 }
 
+// Fetch a cross-origin URL as text through a chain of free CORS proxies.
+async function fetchViaProxy(url, ms = 11000) {
+  const proxies = [
+    (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+    (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u) => `https://thingproxy.freeboard.io/fetch/${u}`,
+  ];
+  for (const p of proxies) {
+    try {
+      const r = await withTimeout(fetch(p(url)), ms);
+      if (r.ok) {
+        const t = await r.text();
+        if (t && t.length > 2) return t;
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
+// ---------- GOOGLE DEMAND / QUESTIONS (autocomplete, via proxy) ----------
+// Real "what people search" — the demand + questions signal, free, no key.
+export async function fetchGoogleSuggest(q) {
+  const target = `https://suggestqueries.google.com/complete/search?client=firefox&q=${encodeURIComponent(q)}`;
+  try {
+    const t = await fetchViaProxy(target, 9000);
+    if (t) {
+      const arr = JSON.parse(t); // ["q", ["s1","s2",...]]
+      const s = (arr[1] || []).slice(0, 10);
+      if (s.length) return { ok: true, suggestions: s };
+    }
+  } catch (e) {}
+  return { ok: false, suggestions: [] };
+}
+
+// ---------- REDDIT CUSTOMER VOICE (search.json, via proxy) ----------
+// Real "what people complain about, in their own words", free, no key.
+export async function fetchReddit(q) {
+  const target = `https://www.reddit.com/search.json?q=${encodeURIComponent(q)}&limit=10&sort=relevance`;
+  try {
+    const t = await fetchViaProxy(target, 12000);
+    if (t) {
+      const j = JSON.parse(t);
+      const posts = (j.data?.children || [])
+        .map((c) => ({ t: c.data.title, sub: "r/" + c.data.subreddit, up: c.data.ups }))
+        .filter((p) => p.t).slice(0, 6);
+      if (posts.length) return { ok: true, posts };
+    }
+  } catch (e) {}
+  return { ok: false, posts: [] };
+}
+
 // ---------- BEST-EFFORT HOMEPAGE META (via free CORS proxy) ----------
 export async function fetchHomepageMeta(domain) {
   const url = `https://${cleanDomain(domain)}`;

@@ -10,14 +10,20 @@ import { onboardingHTML, progressHTML, runAudit } from "./onboarding.js";
 import { domainFromBrand } from "./fetchers.js";
 
 const NAV = [
-  { sec: "Overview", items: [["overview", "Executive Overview", icons.exec]] },
+  { sec: "Overview", items: [
+    ["overview", "Executive Overview", icons.exec],
+    ["research", "Market Research", icons.search],
+  ]},
   { sec: "Paid Media", items: [
     ["adstrategy", "Ad Strategy", icons.ads],
     ["creative", "Creative Intelligence", icons.grid],
     ["keywords", "Keyword Plan", icons.search],
   ]},
-  { sec: "Organic & AI", items: [["aeo", "AEO Visibility", icons.spark]] },
-  { sec: "Synthesis", items: [["strategist", "Growth Strategist", icons.brain]] },
+  { sec: "Organic & AI", items: [["aeo", "AEO & GEO", icons.spark]] },
+  { sec: "Synthesis", items: [
+    ["strategist", "Growth Strategist", icons.brain],
+    ["playbook", "Playbook & Guide", icons.brain],
+  ]},
 ];
 
 let current = "overview";

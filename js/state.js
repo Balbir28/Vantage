@@ -14,6 +14,8 @@ export const STATE = {
   entity: null,          // { wiki, wikidataId, sitelinks, strength, url }
   cwv: null,             // { perf, lcp, cls, inp }
   competitors: [],       // [{ name, domain, entity, cwv }]
+  autoCompetitors: [],   // [names] auto-suggested from the India brand map
+  research: null,        // { reddit:[], google:[] } live market-research signals
 };
 
 const KEY = "vantage-audit";
@@ -31,5 +33,5 @@ export function loadState() {
 }
 export function resetState() {
   try { localStorage.removeItem(KEY); } catch (e) {}
-  Object.assign(STATE, { ran: false, brand: "", domain: "", logo: "", description: "", extract: "", entity: null, cwv: null, competitors: [] });
+  Object.assign(STATE, { ran: false, brand: "", domain: "", logo: "", description: "", extract: "", entity: null, cwv: null, competitors: [], autoCompetitors: [], research: null });
 }

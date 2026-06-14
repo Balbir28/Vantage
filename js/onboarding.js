@@ -4,7 +4,19 @@
 //  fills STATE, drives a progress UI that mirrors the agent pipeline.
 // ============================================================
 import { STATE, saveState } from "./state.js";
-import { fetchEntity, fetchCWV, fetchHomepageMeta, domainFromBrand, cleanDomain, logoUrl } from "./fetchers.js";
+import { fetchEntity, fetchCWV, fetchHomepageMeta, fetchGoogleSuggest, fetchReddit, domainFromBrand, cleanDomain, logoUrl } from "./fetchers.js";
+import { indiaBrands, defaultIndiaSet } from "./data.js";
+
+// Auto-suggest realistic Indian competitors from the brand name.
+export function competitorsFor(brand) {
+  const b = brand.trim().toLowerCase();
+  for (const cat of Object.values(indiaBrands)) {
+    if (cat.match.some((m) => b.includes(m) || m.includes(b))) {
+      return cat.set.filter((x) => x.toLowerCase() !== b);
+    }
+  }
+  return defaultIndiaSet;
+}
 
 export function onboardingHTML() {
   return `<div class="onboard">
@@ -41,7 +53,8 @@ export function progressHTML() {
       <div class="psteps">
         ${step("entity", "Resolving entity & knowledge graph")}
         ${step("site", "Measuring site health (Core Web Vitals)")}
-        ${step("comp", "Benchmarking competitors")}
+        ${step("comp", "Mapping Indian competitors")}
+        ${step("research", "Mining customer voice & demand (Reddit · Google)")}
         ${step("synth", "Synthesizing strategy")}
       </div>
     </div>
@@ -80,8 +93,9 @@ export async function runAudit(brand, site, compStr) {
   STATE.cwv = cwv.ok ? cwv : null;
   mark("site", cwv.ok ? "done" : "warn", cwv.ok ? `Perf ${cwv.perf} · LCP ${cwv.lcp}s` : "PageSpeed unavailable (rate-limited)");
 
-  // 3) competitors
+  // 3) competitors — entered domains, else auto-mapped Indian rivals
   activate("comp");
+  STATE.autoCompetitors = competitorsFor(STATE.brand);
   const comps = compStr.split(",").map((s) => cleanDomain(s)).filter(Boolean).slice(0, 4);
   STATE.competitors = [];
   if (comps.length) {
@@ -93,10 +107,23 @@ export async function runAudit(brand, site, compStr) {
     STATE.competitors = results;
     mark("comp", "done", `${results.length} benchmarked`);
   } else {
-    mark("comp", "warn", "none supplied — using representative set");
+    mark("comp", "done", `auto: ${STATE.autoCompetitors.slice(0, 3).join(", ")}…`);
   }
 
-  // 4) synthesize
+  // 4) market research — live customer voice (Reddit) + demand (Google)
+  activate("research");
+  const cat = STATE.brand;
+  const [reddit, gWhy, gBest] = await Promise.all([
+    fetchReddit(`${cat} review`),
+    fetchGoogleSuggest(`why ${cat}`),
+    fetchGoogleSuggest(`best ${cat}`),
+  ]);
+  const google = [...(gBest.suggestions || []), ...(gWhy.suggestions || [])].slice(0, 10);
+  STATE.research = { reddit: reddit.ok ? reddit.posts : [], google };
+  const liveBits = (reddit.ok ? 1 : 0) + (google.length ? 1 : 0);
+  mark("research", liveBits ? "done" : "warn", liveBits ? `${(STATE.research.reddit.length)} threads · ${google.length} queries` : "sources rate-limited");
+
+  // 5) synthesize
   activate("synth");
   await new Promise((r) => setTimeout(r, 500));
   mark("synth", "done");

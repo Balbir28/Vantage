@@ -10,7 +10,11 @@ const srcBadge = (live) => live
   ? '<span class="src live"><span class="ld"></span>Live</span>'
   : '<span class="src demo"><span class="ld"></span>Framework</span>';
 const brandName = () => (STATE.ran ? STATE.brand : D.audit.subject.name);
-const competitorNames = () => (STATE.ran && STATE.competitors.length ? STATE.competitors.map((c) => c.name) : D.audit.competitors);
+const competitorNames = () => {
+  if (STATE.ran && STATE.competitors.length) return STATE.competitors.map((c) => c.name);
+  if (STATE.ran && STATE.autoCompetitors && STATE.autoCompetitors.length) return STATE.autoCompetitors;
+  return D.audit.competitors;
+};
 const repBanner = '<div class="banner">⚑ <span><b>Representative analysis.</b> Meta &amp; Google ad data needs a connected ad-platform key + backend (paid). The framework below shows exactly how live data renders.</span></div>';
 
 // Real Core Web Vitals (PageSpeed) — brand + competitors, with graceful fallback.
@@ -241,7 +245,7 @@ export function creative() {
       <div class="card">
         <div class="head"><h3>Creative velocity & fatigue</h3></div>
         <div class="ring-wrap" style="margin-bottom:14px">${ring(82, { size: 104, label: "your share", stroke: 9 })}
-          <div class="prose" style="font-size:13px"><b>68% of your spend</b> sits in one feature-led angle — early fatigue indicators (rising frequency, falling longevity on new launches). Aurelia ships <b>2.4× more</b> creative variants per week.</div></div>
+          <div class="prose" style="font-size:13px"><b>68% of your spend</b> sits in one feature-led angle — early fatigue indicators (rising frequency, falling longevity on new launches). &Me ships <b>2.4× more</b> creative variants per week.</div></div>
         <span class="badge coral">⚑ Fatigue risk: High</span> <span class="badge amber">Diversify within 2 weeks</span>
       </div>
     </div>
@@ -334,6 +338,147 @@ export function aeo() {
         <div style="display:flex;flex-direction:column;gap:9px">${recs}</div>
       </div>
     </div>
+
+    ${geoSection()}
+  </div>`;
+}
+
+// GEO depth — generative-engine optimisation levers + live "ask the engines" links.
+function geoSection() {
+  const G = D.geo;
+  const levers = G.levers.map((l) => `
+    <div class="opp">
+      <div class="rank" style="background:linear-gradient(135deg,var(--indigo),var(--violet))">${l.live ? "●" : "○"}</div>
+      <div class="body"><div class="t" style="font-size:14px">${l.nm} ${srcBadge(l.live)}</div><div class="d">${l.d}</div></div>
+    </div>`).join("");
+  const q = (s) => encodeURIComponent(s);
+  const promptRows = G.prompts.map((p) => `
+    <div class="liblink">
+      <div class="libname">"${p}"</div>
+      <div class="libbtns">
+        <a class="btn ghost" href="https://www.perplexity.ai/search?q=${q(p)}" target="_blank" rel="noopener">Perplexity ↗</a>
+        <a class="btn ghost" href="https://chatgpt.com/?q=${q(p)}" target="_blank" rel="noopener">ChatGPT ↗</a>
+        <a class="btn ghost" href="https://www.google.com/search?q=${q(p)}" target="_blank" rel="noopener">AI Overview ↗</a>
+      </div>
+    </div>`).join("");
+  return `<div class="card">
+      <div class="head"><h3>AEO vs GEO — the generative layer</h3><span class="sub">· being the answer & the citation</span></div>
+      <p class="prose" style="font-size:13.5px;margin-bottom:14px">${G.explainer}</p>
+      <div class="grid c-2c">
+        <div>
+          <div class="eyebrow" style="margin-bottom:10px">The 4 levers</div>
+          <div style="display:flex;flex-direction:column;gap:9px">${levers}</div>
+        </div>
+        <div>
+          <div class="eyebrow" style="margin-bottom:10px">Audit your own visibility — ask the engines</div>
+          ${promptRows}
+          <p class="faint" style="font-size:11.5px;margin-top:8px">Run these in each engine and note if ${brandName()} appears. Live in-app probing of every engine needs their APIs (paid) — these one-click checks are the free path.</p>
+        </div>
+      </div>
+    </div>`;
+}
+
+// ---------- MARKET RESEARCH ENGINE (the 5 websites) ----------
+export function research() {
+  const R = D.research;
+  const q = (s) => encodeURIComponent(s);
+  const brand = brandName();
+
+  // Reddit — live if fetched, else representative
+  const liveReddit = STATE.ran && STATE.research && STATE.research.reddit.length;
+  const redditRows = (liveReddit ? STATE.research.reddit : R.reddit).map((p) => `
+    <div class="opp"><div class="body"><div class="t" style="font-size:13.5px;font-weight:550">${p.t}</div>
+      <div class="meta"><span class="badge grey">${p.sub}</span><span class="badge teal">▲ ${p.up}</span></div></div></div>`).join("");
+
+  // Google — live suggestions if fetched, else representative
+  const liveGoogle = STATE.ran && STATE.research && STATE.research.google.length;
+  const googleRows = (liveGoogle ? STATE.research.google.map((g) => ({ q: g, type: "Live query" })) : R.google).map((g) => `
+    <div class="liblink"><div class="libname" style="font-weight:550;font-size:13.5px">${g.q}</div><span class="badge grey">${g.type || "search"}</span></div>`).join("");
+
+  const amazon = R.amazon.map((a) => `
+    <div class="opp"><div class="body"><div class="t" style="font-size:13.5px">${a.gap || a.price}</div>
+      <div class="d">${a.signal}</div>${a.pct ? `<div class="meta"><span class="badge coral">${a.pct}</span></div>` : ""}</div></div>`).join("");
+  const youtube = R.youtube.map((y) => `<div class="opp"><div class="body"><div class="t" style="font-size:13px">${y.t}</div><div class="d">${y.who}</div></div></div>`).join("");
+  const insta = R.instagram.map((i) => `<div class="opp"><div class="body"><div class="t" style="font-size:13.5px">${i.hook}</div><div class="meta"><span class="badge grey">${i.fmt}</span><span class="faint" style="font-size:11px">${i.note}</span></div></div></div>`).join("");
+
+  const ext = (label, href, cls) => `<a class="btn ${cls}" href="${href}" target="_blank" rel="noopener">${label} ↗</a>`;
+
+  return `<div class="page">
+    <div class="card">
+      <div class="head"><h3>Market Research Engine</h3><span class="sub">· the 5 sources a whole research team would cover</span>
+        <div class="spacer"></div><span class="src live"><span class="ld"></span>2 live</span></div>
+      <p class="prose" style="font-size:13.5px">One person, five websites. Reddit & Google demand are pulled <b>live & free</b>; Amazon, YouTube & Instagram are one click into the real results (no free API). It all rolls into one picture of <b>what to say</b> and <b>what to build</b>.</p>
+    </div>
+
+    <div class="grid c-2c">
+      <div class="card">
+        <div class="head"><h3>① Reddit — what people complain about</h3><div class="spacer"></div>${srcBadge(!!liveReddit)}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${redditRows}</div>
+        <div style="margin-top:12px">${ext("Open Reddit search", `https://www.reddit.com/search/?q=${q(brand)}`, "ghost")}</div>
+      </div>
+      <div class="card">
+        <div class="head"><h3>④ Google — demand & questions</h3><div class="spacer"></div>${srcBadge(!!liveGoogle)}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${googleRows}</div>
+      </div>
+    </div>
+
+    <div class="grid c-2c">
+      <div class="card">
+        <div class="head"><h3>② Amazon — product gaps & price</h3><div class="spacer"></div>${srcBadge(false)}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${amazon}</div>
+        <div style="margin-top:12px">${ext("Open Amazon.in reviews", `https://www.amazon.in/s?k=${q(brand)}`, "ghost")}</div>
+      </div>
+      <div class="card">
+        <div class="head"><h3>③ YouTube — what confuses buyers</h3><div class="spacer"></div>${srcBadge(false)}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${youtube}</div>
+        <div style="margin-top:12px">${ext("Open YouTube search", `https://www.youtube.com/results?search_query=${q(brand + " review")}`, "ghost")}</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="head"><h3>⑤ Instagram — hooks & formats already working</h3><div class="spacer"></div>${srcBadge(false)}</div>
+      <div class="grid" style="grid-template-columns:1fr 1fr 1fr">${insta}</div>
+      <div style="margin-top:12px">${ext("Open Instagram tag", `https://www.instagram.com/explore/tags/${q(brand.replace(/[^a-z0-9]/gi, "").toLowerCase())}/`, "ghost")}</div>
+    </div>
+
+    <div class="card" style="border-color:var(--stroke-strong)">
+      <div class="head"><span class="eyebrow">The one picture · what to say + what to build</span></div>
+      <p class="prose">${R.synthesis}</p>
+    </div>
+  </div>`;
+}
+
+// ---------- PLAYBOOK / HOW TO USE / 1000 Cr ----------
+export function playbook() {
+  const P = D.playbook;
+  const how = P.howto.map((h) => `<div class="opp"><div class="rank">${h.step.split(" ")[0]}</div><div class="body"><div class="t">${h.step.replace(/^\d+ · /, "")}</div><div class="d">${h.d}</div></div></div>`).join("");
+  const pillars = P.pillars.map((p, i) => `
+    <div class="opp"><div class="rank" style="background:linear-gradient(135deg,var(--teal),var(--indigo))">${i + 1}</div>
+      <div class="body"><div class="t">${p.nm.replace(/^\d+ · /, "")}</div><div class="d">${p.d}</div>
+        <div class="meta"><span class="badge teal">North-star metric · ${p.metric}</span></div></div></div>`).join("");
+  const minds = D.personas.map((m) => `
+    <div class="card hover" style="padding:16px 18px">
+      <div class="head" style="margin-bottom:10px"><h3 style="font-size:14px">${m.icon} ${m.role}</h3></div>
+      <div class="faint" style="font-size:11px;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">${m.focus}</div>
+      <p class="prose" style="font-size:13px;margin:0">${m.take}</p>
+    </div>`).join("");
+
+  return `<div class="page">
+    <div class="card">
+      <div class="head"><span class="eyebrow">How to use Vantage</span></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">${how}</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><h3>The 5 minds reading every recommendation</h3><span class="sub">· growth · product · data · scale · P&L</span></div>
+      <div class="grid" style="grid-template-columns:1fr 1fr">${minds}</div>
+    </div>
+
+    <div class="card">
+      <div class="head"><span class="eyebrow">The 1000 Cr brand playbook</span><div class="spacer"></div><span class="badge teal">7 pillars</span></div>
+      <p class="prose" style="font-size:13.5px;margin-bottom:16px"><b>North star:</b> ${P.northstar}</p>
+      <div style="display:flex;flex-direction:column;gap:10px">${pillars}</div>
+    </div>
   </div>`;
 }
 
@@ -362,9 +507,11 @@ export function strategist() {
 
 export const PAGES = {
   overview: { fn: overview, title: "Executive Overview", sub: "Strategic growth audit" },
+  research: { fn: research, title: "Market Research", sub: "Reddit · Amazon · YouTube · Google · Instagram" },
   adstrategy: { fn: adStrategy, title: "Ad Strategy", sub: "Angle × Awareness intelligence" },
   creative: { fn: creative, title: "Creative Intelligence", sub: "Meta ad library teardown" },
   keywords: { fn: keywords, title: "Keyword Action Plan", sub: "Google paid-search strategy" },
-  aeo: { fn: aeo, title: "AEO Visibility", sub: "Answer-engine optimisation" },
+  aeo: { fn: aeo, title: "AEO & GEO", sub: "Answer & generative-engine visibility" },
   strategist: { fn: strategist, title: "Growth Strategist", sub: "Synthesised action plan" },
+  playbook: { fn: playbook, title: "Playbook & Guide", sub: "How to use · the 1000 Cr framework" },
 };
