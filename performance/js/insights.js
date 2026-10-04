@@ -108,12 +108,12 @@ export function executiveRows(view, insights) {
     row("Call centre", "Not reachable", fmtPct(crm.notReachablePct, 0), `median first call ${fmtMin(crm.medianResp)} · ${crm.untouched} uncalled`, crm.notReachablePct >= 0.25 ? "bad" : "");
   }
   const inScope = accounts.filter((a) => a.inScope && a.conv >= 3);
-  if (inScope.length > 1) { const best = inScope.slice().sort((a, b) => a.cpl - b.cpl)[0], worst = inScope.slice().sort((a, b) => b.cpl - a.cpl)[0]; row("Read", "Most efficient account", best.name, `CPL ${fmtAED(best.cpl)} · cost per booking ${fmtAED(best.costPerBooking)}`, "good"); row("Read", "Most expensive account", worst.name, `CPL ${fmtAED(worst.cpl)} · cost per booking ${fmtAED(worst.costPerBooking)}`, "bad"); }
+  if (inScope.length > 1) { const best = inScope.slice().sort((a, b) => a.cpl - b.cpl)[0], worst = inScope.slice().sort((a, b) => b.cpl - a.cpl)[0]; row("Read", "Most efficient", best.name, `CPL ${fmtAED(best.cpl)} · cost per booking ${fmtAED(best.costPerBooking)}`, "good"); row("Read", "Most expensive", worst.name, `CPL ${fmtAED(worst.cpl)} · cost per booking ${fmtAED(worst.costPerBooking)}`, "bad"); }
   const risk = centres.filter((c) => c.healthBand === "risk" && c.spend >= 1000).sort((a, b) => b.spend - a.spend);
-  row("Read", "Centres needing attention", risk.length ? String(risk.length) : "none", risk.slice(0, 5).map((c) => c.short).join(", "), risk.length ? "warn" : "good");
+  row("Read", "Centres at risk", risk.length ? String(risk.length) : "none", risk.slice(0, 5).map((c) => c.short).join(", "), risk.length ? "warn" : "good");
   const scale = view.campaigns.filter((c) => c.status === "scale").length, fix = view.campaigns.filter((c) => c.status === "fix").length, pause = view.campaigns.filter((c) => c.status === "pause").length;
   row("Read", "Campaign calls", `${scale} scale · ${fix} fix · ${pause} pause`, `of ${view.campaigns.length} campaigns`);
-  if (kwStats.totalCost) row("Read", "Keyword spend with no conversions", fmtAED(kwStats.wastedTotal), `${fmtPct(kwStats.wastedTotal / kwStats.totalCost, 0)} of spend · ${kwStats.wastedCount} keywords${kwStats.approx ? " (whole weeks)" : ""}`, kwStats.wastedTotal / kwStats.totalCost >= 0.35 ? "bad" : "warn");
+  if (kwStats.totalCost) row("Read", "Keyword waste", fmtAED(kwStats.wastedTotal), `${fmtPct(kwStats.wastedTotal / kwStats.totalCost, 0)} of spend · ${kwStats.wastedCount} keywords${kwStats.approx ? " (whole weeks)" : ""}`, kwStats.wastedTotal / kwStats.totalCost >= 0.35 ? "bad" : "warn");
   return R;
 }
 

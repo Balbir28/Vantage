@@ -258,7 +258,7 @@ function animateNumbers(root) {
 // ---------- boot ----------
 async function boot() {
   loadSettings();
-  if (!S.settings.themeV2) { S.settings.theme = "light"; S.settings.themeV2 = true; saveSettings(); }
+  if (!S.settings.themeV3) { S.settings.theme = "light"; S.settings.themeV3 = true; saveSettings(); }
   if (!("chatOpen" in JSON.parse(localStorage.getItem(SETTINGS_LS) || "{}")) && window.innerWidth < 1100) S.settings.chatOpen = false;
   document.documentElement.dataset.theme = S.settings.theme || "light";
   $("#shell").classList.toggle("chat-closed", S.settings.chatOpen === false);
