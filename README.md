@@ -1,122 +1,152 @@
-# Vantage — Competitor Growth Intelligence
+# Vantage Pulse — Paid Performance Intelligence
 
-An iOS-27-inspired, liquid-glass dashboard for competitor intelligence across **Meta &
-Google ads, SEO, and answer-engine (AEO) visibility** — built to answer *"what should I do
-next?"*, not just show data.
+A Google Sheets–powered dashboard for NMC Healthcare's Google Ads search accounts and call
+centre. It reads the **two raw dumps** (the Google Ads keyword export and the call-centre lead
+export) exactly as they download, and derives everything else itself:
 
-This is a **zero-build static app**: pure HTML + CSS + vanilla JS modules. No Node, no
-toolchain, no dependencies. It deploys to GitHub Pages for free and runs anywhere that can
-serve static files.
+- **Account level** — NMC AUH, NMC DXB, NMC North Emirates, Sunny Clinics
+- **Hospital level** — every centre scored on efficiency, bookings, pacing and reach
+- **Campaign level** — scale / fix / pause by campaign name, with ad groups and keywords
+- **Keywords** — wasted spend, match types, Quality Score bands (click either to list those keywords), proven winners
+- **CTR** — click-through rate by account, hospital, campaign, ad group, match type and keyword, with a daily trend
+- **Click-to-calls** — calls per ad account, segregated by hospital, from a *Click to Calls* tab typed daily in the sheet
+- **Leads & CRM** — booking funnel, speed-to-lead, departments, time of day, reasons
+- **Actions** — every finding ranked by money at stake, plus a copyable weekly plan
+- **AI analyst** — a chat panel that answers from the live numbers (no key needed) and,
+  with a Gemini or Claude key, reasons over the full data pack
 
-## Type a brand → it fetches
+Zero-build static app (HTML + CSS + ES modules), glass UI on the client's ten-swatch palette
+(sapphire · viridian · mint · sand · gamboge · rufous), Sora + Manrope + IBM Plex Mono type.
+Deploys with the rest of Vantage on GitHub Pages at `/performance/`.
 
-The entry screen takes a **brand name** and runs real, free, keyless fetchers right from the
-browser — no backend, no API key:
+## The daily workflow (paste → it fetches itself)
 
-| Signal | Source | Status |
+This is the operating model the app is built around:
+
+1. **Share the sheet once** — Share → General access → *Anyone with the link* → Viewer.
+   (Private sheet? Use *Google sign-in* in Connect; it needs an OAuth Client ID.)
+2. **Connect once** — open the dashboard → **Connect** → paste the sheet link → **Connect & sync**.
+   Leave *Re-sync automatically* on. The link is remembered on that device.
+3. **Paste data every day** — download the Google Ads keyword report and the call-centre export
+   the usual way and paste them at `A1` of **Google Ads Data** and **Lead Data**, replacing what
+   is there. No reshaping, no renaming.
+4. **Open the dashboard** — it re-reads the sheet on open, again every 15 minutes while it stays
+   open (configurable), and whenever you return to the tab after 5+ minutes away. Every account,
+   hospital, campaign, keyword and CRM view recomputes and the actions re-rank. **Sync** in the
+   header refreshes on demand.
+
+The synced month is cached in the browser (IndexedDB), so the dashboard opens instantly and then
+refreshes in the background. The header chip shows the source, the data date and when it last
+synced.
+
+## Connect your sheet
+
+Open the dashboard → **Connect** (sidebar) → paste the Google Sheets link. Three ways to read it,
+all from the browser, no server:
+
+| Mode | Needs | Use when |
 |---|---|---|
-| Knowledge-graph **entity strength** (feeds the AEO score) | Wikipedia + Wikidata | **Live** |
-| **Core Web Vitals** / site health (brand + competitors) | Google PageSpeed Insights | **Live*** |
-| Brand identity (logo, description) | Clearbit + Wikipedia | **Live** |
-| Meta / Google **ad & keyword intelligence** | needs ad-platform keys + a backend | **Framework** |
+| **Public link** | Share → *Anyone with the link* → Viewer | Simplest. Tabs are read by name (editable list). |
+| **API key** | A Google API key with the Sheets API enabled | Finds every tab automatically. |
+| **Google sign-in** | An OAuth Client ID (Web) | The sheet is private. |
 
-Every data point is badged **Live** or **Framework** in the UI — nothing fake is presented as
-real. *PageSpeed's keyless quota is rate-limited, so site health falls back to representative
-values when the quota is exhausted.
+Or just **drop the files**: the Google Ads CSV, the CC export CSV, or the whole `.xlsx`.
 
-> **Why ads aren't live:** Meta Ad Library, Google keyword/CPC, and AEO probes need secret API
-> keys and paid accounts. Keys can't live in browser code, and those APIs block browser calls
-> (CORS) — so they require a backend, which a free static site doesn't have. Those modules show
-> the exact analytical framework; wiring real data = a serverless function on a free tier
-> (Vercel/Cloudflare) that holds the keys. See `competitor-intel-blueprint.md` for that V2 path.
+Tabs are recognised by their **headers, not their names**, so renamed, reordered or extra tabs
+are fine. What it looks for:
 
----
+| Recognised tab | Signature | Gives |
+|---|---|---|
+| Google Ads keyword export | `Day · Campaign · Ad group · Search keyword · Impr. · Cost · Conversions…` | Everything at campaign/keyword/day level |
+| Call-centre lead export | `ID · Status · Reason · Branch · Department · Created At…` | Bookings, reasons, speed-to-lead |
+| Month summary / week tabs | `Centre · Impressions · … · Booked` | The typed call columns (call-extension and landing-page call taps) |
+| Click to Calls | `Date · Ad Account · Hospital · Call Ext. · Page Call Now · Total Click-to-Calls` | Daily calls per hospital (exact for any date range; template on the Click-to-calls page) |
+| Daily Calls Trend | `Date · Call Click Ext. · GA4 Call Now · Total Calls` | Daily calls per account |
+| Budget | `Centre · Budget (AED)` | Pacing |
+| Centre List | `Campaign name contains… · Centre · Region` | Campaign → centre mapping (a built-in default is used if absent) |
 
-## Vantage Pulse — paid performance (Google Sheets → intelligence)
+Only the two exports are required. Without budgets the pacing tiles show “—”; without the typed
+call columns the call tiles show “—”. Everything else still works.
 
-A second app lives in [`performance/`](performance/): a Google Sheets–powered paid-performance
-dashboard for the NMC Healthcare search accounts. It reads the raw Google Ads keyword export
-and the call-centre lead export straight from the sheet (or dropped files), and gives
-account-, hospital- and campaign-level intelligence with a built-in AI analyst.
-Open it at `/performance/` once deployed. See [`performance/README.md`](performance/README.md).
+### Next month
 
----
+Download the two dumps the same way, paste them into the sheet (or drop them here), press
+**Sync**. No reshaping.
 
-## Dashboards
+## Filters
 
-| Page | What it shows |
-|---|---|
-| **Executive Overview** | Growth Potential score, KPI strip, RICE-ranked opportunities, top mistakes |
-| **Ad Strategy** | The **Angle × Awareness Matrix** (Own / Attack / Hold / Avoid) + auto-generated Creative Testing Roadmap |
-| **Creative Intelligence** | Longevity-weighted "winners" board, hook-category frequency, fatigue signals |
-| **Keyword Plan** | Steal / Defend / Expand buckets with **one-click Google Ads CSV export** |
-| **AEO Visibility** | AI Discoverability score, per-engine Share-of-Model-Voice, citation analysis |
-| **Growth Strategist** | Executive summary + sequenced 30 / 90 / 365-day roadmap |
+A single filter row scopes every page and the analyst: **date range** (month to date, last 7/14/30
+days, the previous month, all data, or a custom from/to — the Ads dump may span several months), **ad account**, and **hospital** (narrowed to the chosen
+account). Click any account card to focus on it; open any hospital or campaign for a drill-down.
 
----
+## How the numbers are defined
 
-## Run locally
+- **CPL** = spend ÷ Google Ads form conversions (as in the sheet).
+- **Calls** = call-extension taps + landing-page call taps (typed on the week tabs; pro-rated
+  for custom date ranges and marked *est.*).
+- **Impression share** is never averaged: eligible impressions = impressions ÷ IS per row,
+  then totals divide impressions by eligible impressions. “< 10%” counts at 5%.
+- **Cost per booking** = spend ÷ leads the call centre marked *booked*.
+- **Health (0–100)** = CPL vs network median (35%) + booking rate (30%) + pacing (15%) +
+  impression share (20%).
+- **Campaign status**: *Scale* = CPL ≤ 0.7× network median and reach capped by rank;
+  *Fix* = CPL ≥ 1.8× median (or CTR < 5%); *Pause* = ≥ AED 300 with no conversions;
+  *Watch* = too small to judge; *Hold* = within range.
 
-No install needed — just serve the folder over HTTP (ES modules don't work via `file://`):
+## The strategist layer
 
-```bash
-cd vantage
-python3 -m http.server 8000
-# open http://localhost:8000
-```
+The rule engine reasons the way a senior PPC lead reviews an account, and every finding carries
+the money at stake:
 
----
+- **Diagnose before prescribing** — zero conversions at high click volume is flagged as a
+  measurement problem first, not a bidding one; high impression share with a poor CPL is flagged
+  as a page/offer problem, not a budget one.
+- **Budget reallocation plan** (Actions page) — frees budget from pause/fix campaigns, funds the
+  cheap-and-capped ones up to their impression-share ceiling, and projects the net conversion
+  change and blended CPL. Receivers are capped at 1.5× their current spend per step.
+- **Tactical playbook** — findings grouped into the six pillars of a weekly review: budget &
+  pacing, bidding & impression share, structure/keywords/match types, landing pages & offer,
+  call centre & lead handling, measurement & trend.
+- **Bidding readiness** — campaigns with enough conversions and a sub-median CPL are called out
+  for Target CPA with a suggested target; call-heavy accounts are told to import calls as
+  conversions and judge on blended cost per lead.
+- The chat persona is the same strategist: it diagnoses, sizes in AED, sequences and names the
+  metric to watch.
 
-## Deploy free on GitHub Pages
+## AI analyst
 
-**Option A — web UI (no git needed):**
-1. Create a new repo on github.com (e.g. `vantage`), public.
-2. Upload every file in this folder (keep the structure: `index.html`, `js/`, `styles/`, `.nojekyll`).
-3. Repo → **Settings → Pages** → Source: **Deploy from a branch** → `main` / `/ (root)` → Save.
-4. Live in ~1 min at `https://<your-username>.github.io/vantage/`.
+The chat answers from the computed numbers instantly — rankings, comparisons, pacing, keyword
+waste, call-centre speed, any hospital/campaign/specialty by name. Add a **Gemini** or
+**Claude** key under *Data → AI analyst* and open-ended questions are answered by the model from
+a compact data pack of the live figures plus the computed facts. Keys stay in the browser and go
+straight to the provider.
 
-**Option B — git CLI:**
-```bash
-cd vantage
-git init && git add -A && git commit -m "Vantage dashboard"
-git branch -M main
-git remote add origin https://github.com/<you>/vantage.git
-git push -u origin main
-# then enable Pages in Settings as in Option A
-```
+## Privacy
 
-The `.nojekyll` file is already included so GitHub serves the `js/` folder as-is.
-
----
-
-## Wiring real data later
-
-GitHub Pages is static-only — it can't run scrapers or hold API keys. The free, real path:
-
-1. Run the pipeline **offline** (locally or on a schedule) — Apify (Meta Ad Library), DataForSEO
-   (keywords/backlinks), LLM probes (AEO), your own crawler (CRO/PDP).
-2. Write the results as JSON files into this repo (e.g. `data/audit-latest.json`).
-3. Change `js/data.js` to `fetch()` that JSON instead of exporting literals.
-4. Commit → Pages redeploys. 100% free, fully dynamic-looking, no backend.
-
-Live *on-demand* audits (enter a URL, get a fresh report) need a backend on a free tier
-(Vercel/Supabase) — that's the V2 step in the blueprint.
-
----
+The bundled sample (`data/snapshot.json`) carries no patient names, phone numbers, emails or
+agent names. When you load your own export in the browser, nothing leaves the device except the
+optional AI request.
 
 ## Structure
 
 ```
-vantage/
-├── index.html          # app shell (sidebar, topbar, mount points)
-├── styles/app.css      # the iOS-27 liquid-glass design system
+performance/
+├── index.html            # shell: sidebar, filter row, pages, chat panel, drawers, data modal
+├── styles/perf.css       # design system (dark + light), validated chart palette
 ├── js/
-│   ├── fetchers.js     # LIVE free fetchers — Wikipedia/Wikidata, PageSpeed, logos
-│   ├── onboarding.js   # brand entry screen + audit runner (progress UI)
-│   ├── state.js        # the live audit store (persists to localStorage)
-│   ├── data.js         # representative data — the framework fallback
-│   ├── ui.js           # icons, SVG score rings/gauges, bar helper
-│   ├── pages.js        # the six dashboard renderers (read live state first)
-│   └── app.js          # flow control, nav, theme, tooltips, tabs, CSV export
-└── .nojekyll           # tells GitHub Pages to serve js/ verbatim
+│   ├── pack.js           # compact on-disk form of the sample + loader
+│   ├── csv.js            # RFC-4180 CSV parser
+│   ├── parse.js          # tab detection by header signature → normalised model
+│   ├── analytics.js      # filter → view: accounts, centres, campaigns, keywords, trends, CRM
+│   ├── insights.js       # the performance-marketer rules → ranked actions + executive summary
+│   ├── charts.js         # dependency-free SVG charts (line, bar, scatter, heatmap, sparkline…)
+│   ├── pages.js          # the seven pages + drill-down drawers
+│   ├── analyst.js        # local intent engine + Gemini/Claude providers + data pack
+│   ├── sheets.js         # Google Sheets connector (public / API key / OAuth) + file upload
+│   ├── idb.js            # IndexedDB cache so a synced month survives reloads
+│   └── app.js            # state, routing, filters, chat, modal, events
+├── data/snapshot*.json   # bundled sample month (anonymised, packed in parts)
+└── tools/build-snapshot.mjs  # regenerate the sample from a folder of per-tab CSVs
 ```
+
+Regenerate the sample: `node tools/build-snapshot.mjs <folder-of-csvs>` (one CSV per tab).
