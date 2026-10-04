@@ -12,7 +12,7 @@
 //    dailyCalls:[ { date, acc:{ account:{ext,ga4,total} } } ]
 //    ads:       { campaigns:[{name,account,centre,region,specialty}],
 //                 daily:[{c,d,w,impr,clicks,cost,conv,calls,elig,lost}],
-//                 keywords:[{c,adgroup,kw,match,qs,impr,clicks,cost,conv,elig,lost}] }
+//                 keywords:[{c,adgroup,kw,match,w,qs,impr,clicks,cost,conv,elig,lost}] }  (one row per keyword per week)
 //    leads:     [ { id,status,reason,dept,centre,priority,created,respMin,week,agent,doctor } ]
 //  }
 // ============================================================
@@ -338,9 +338,9 @@ export function parseAds(rows, header, ctx = {}) {
     dd.impr += impr; dd.clicks += clicks; dd.cost += cost; dd.conv += conv; dd.calls += calls; dd.elig += elig; dd.lost += lostW;
     const adgroup = String(cell(r, col.adgroup) ?? "").trim(), kw = String(cell(r, col.kw) ?? "").trim();
     const match = String(cell(r, col.match) ?? "").replace(/ match$/i, "").trim();
-    const kk = ci + "|" + adgroup + "|" + kw + "|" + match;
+    const kk = ci + "|" + adgroup + "|" + kw + "|" + match + "|" + w;
     let kd = kws.get(kk);
-    if (!kd) { kd = { c: ci, adgroup, kw, match, qs: null, impr: 0, clicks: 0, cost: 0, conv: 0, elig: 0, lost: 0 }; kws.set(kk, kd); }
+    if (!kd) { kd = { c: ci, adgroup, kw, match, w, qs: null, impr: 0, clicks: 0, cost: 0, conv: 0, elig: 0, lost: 0 }; kws.set(kk, kd); }
     kd.impr += impr; kd.clicks += clicks; kd.cost += cost; kd.conv += conv; kd.elig += elig; kd.lost += lostW;
     const qs = num(cell(r, col.qs)); if (qs != null) kd.qs = kd.qs == null ? qs : Math.max(kd.qs, qs); // latest/best observed
   }

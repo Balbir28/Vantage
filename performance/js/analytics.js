@@ -181,9 +181,19 @@ export function computeView(model, rawFilter = {}) {
   for (const l of leadsScope) { const k = specialtyOfDept(l.dept); let s = specMap.get(k); if (!s) { s = { name: k, ...emptyMetrics(), campaigns: 0 }; specMap.set(k, s); } s.crmLeads++; if (l.status === "booked") s.booked++; else if (l.status === "not reachable") s.notReachable++; else if (l.status === "pending") s.pending++; else s.notBooked++; }
   const specialties = [...specMap.values()].map(finalize).sort((a, b) => b.spend - a.spend);
 
-  // --- keywords (month-level aggregates, scoped) ---
-  const keywords = (model.ads?.keywords || []).filter((k) => cScope(campaigns[k.c])).map((k) => { const c = campaigns[k.c]; const o = { ...k, campaign: c.name, centre: c.centre, account: c.account, specialty: c.specialty }; o.cpl = div(o.cost, o.conv); o.ctr = div(o.clicks, o.impr); o.cpc = div(o.cost, o.clicks); o.is = div(o.impr, o.elig); o.lostIs = div(o.lost, o.elig); return o; });
-  const kwStats = keywordStats(keywords);
+  // --- keywords (weekly rows → aggregated over the weeks that overlap the range) ---
+  const weeksInRange = new Set(); let kwApprox = false;
+  for (const key of ["W1", "W2", "W3", "W4", "W5"]) { const b = weekBounds(model, key); if (b.start > last) continue; const oe = b.end < end ? b.end : end, os = b.start > start ? b.start : start; if (oe >= os) { weeksInRange.add(key); if (os !== b.start || oe !== (b.end < last ? b.end : last)) kwApprox = true; } }
+  const kwAgg = new Map();
+  for (const k of model.ads?.keywords || []) {
+    if (!weeksInRange.has(k.w) || !cScope(campaigns[k.c])) continue;
+    const key = k.c + "|" + k.adgroup + "|" + k.kw + "|" + k.match;
+    let o = kwAgg.get(key);
+    if (!o) { const c = campaigns[k.c]; o = { c: k.c, adgroup: k.adgroup, kw: k.kw, match: k.match, qs: null, impr: 0, clicks: 0, cost: 0, conv: 0, elig: 0, lost: 0, campaign: c.name, centre: c.centre, account: c.account, specialty: c.specialty }; kwAgg.set(key, o); }
+    o.impr += k.impr; o.clicks += k.clicks; o.cost += k.cost; o.conv += k.conv; o.elig += k.elig; o.lost += k.lost; if (k.qs != null) o.qs = o.qs == null ? k.qs : Math.max(o.qs, k.qs);
+  }
+  const keywords = [...kwAgg.values()].map((o) => { o.cpl = div(o.cost, o.conv); o.ctr = div(o.clicks, o.impr); o.cpc = div(o.cost, o.clicks); o.is = div(o.impr, o.elig); o.lostIs = div(o.lost, o.elig); return o; });
+  const kwStats = keywordStats(keywords); kwStats.weeks = [...weeksInRange]; kwStats.approx = kwApprox;
 
   // --- trends (whole month, scoped by account/centre; the page highlights the range) ---
   const trend = buildTrends(model, { first, last, dim, cScope, scopeCentres, scopeCentreNames, leadCentreOk, account, centre, campaigns });

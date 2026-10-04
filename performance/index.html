@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -14,17 +14,16 @@
 <body>
   <div class="bg" aria-hidden="true"></div>
   <div class="shell" id="shell">
-    <aside class="side" aria-label="Navigation">
-      <div class="brand"><div class="mark" aria-hidden="true">V</div><div class="name">Vantage Pulse<small>Paid performance</small></div></div>
-      <div class="nav-label">Intelligence</div>
-      <nav class="nav" id="nav"></nav>
-      <div class="grow"></div>
-      <div class="source" id="source"></div>
-      <div class="theme" role="group" aria-label="Theme"><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
-    </aside>
-
     <main class="main" id="main">
       <header class="top">
+        <div class="brand"><div class="mark" aria-hidden="true">V</div><div class="name">Vantage Pulse<small>Paid performance</small></div></div>
+        <div class="grow"></div>
+        <div class="source" id="source"></div>
+        <div class="theme" role="group" aria-label="Theme"><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
+        <button class="btn ghost icon" id="btn-chat" data-chat-toggle title="Toggle the analyst" aria-label="Toggle the analyst"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z"/></svg> Analyst</button>
+      </header>
+      <nav class="tabs" id="nav" aria-label="Pages"></nav>
+      <div class="bar">
         <div><h1 id="title">Overview</h1><div class="sub" id="subtitle"></div></div>
         <div class="grow"></div>
         <div class="filters" role="group" aria-label="Filters">
@@ -32,11 +31,9 @@
           <div class="fsel dates"><label for="f-from">From</label><input type="date" id="f-from" /><label for="f-to">to</label><input type="date" id="f-to" /></div>
           <div class="fsel"><label for="f-account">Ad account</label><select id="f-account"></select></div>
           <div class="fsel"><label for="f-centre">Hospital</label><select id="f-centre"></select></div>
-          <button class="btn ghost icon" id="btn-chat" data-chat-toggle title="Toggle the analyst" aria-label="Toggle the analyst"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z"/></svg> Analyst</button>
         </div>
-      </header>
+      </div>
       <section id="page" aria-live="polite"></section>
-      <nav class="mobile-nav" id="mobile-nav" aria-label="Pages"></nav>
     </main>
 
     <aside class="chat" id="chat" aria-label="AI analyst">

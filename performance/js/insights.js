@@ -93,6 +93,32 @@ export function generateInsights(view) {
   return out.map((o, i) => ({ id: "i" + i, ...o }));
 }
 
+/** Structured executive read: rows of {group, label, value, note, tone}. */
+export function executiveRows(view, insights) {
+  const { totals: t, crm, accounts, centres, kwStats } = view, R = [];
+  const row = (group, label, value, note = "", tone = "") => R.push({ group, label, value, note, tone });
+  row("Media", "Spend", fmtAED(t.spend), t.budget ? `${fmtPct(t.pacing, 0)} of ${fmtAED(t.budget)} pro-rated budget` : "no budget loaded", t.budget ? (t.pacing < 0.85 ? "warn" : t.pacing > 1.1 ? "bad" : "good") : "");
+  row("Media", "Form conversions", fmtNum(t.conv), `CPL ${fmtAED(t.cpl)}`);
+  row("Media", "Click-to-calls", t.calls == null ? "—" : fmtNum(t.calls), t.calls ? `${fmtAED(t.costPerCall)} per call${view.flags.callsEstimated ? " (est.)" : ""}` : "add the call columns");
+  row("Media", "Impression share", fmtPct(t.is, 0), `${fmtPct(t.lostIs, 0)} lost to rank · CTR ${fmtPct(t.ctr, 1)} · CPC ${fmtAED(t.cpc)}`);
+  if (crm.leads) {
+    row("Call centre", "Leads logged", fmtNum(crm.leads), `${fmtNum(crm.leads / view.period.days, 1)} per day`);
+    row("Call centre", "Booked", fmtNum(crm.booked), `${fmtPct(crm.bookingPct, 0)} booking · ${fmtPct(crm.reachedPct, 0)} when reached`, crm.bookingPct >= 0.45 ? "good" : crm.bookingPct < 0.35 ? "bad" : "");
+    row("Call centre", "Cost per booking", fmtAED(crm.costPerBooking), `cost per lead ${fmtAED(crm.costPerLead)}`);
+    row("Call centre", "Not reachable", fmtPct(crm.notReachablePct, 0), `median first call ${fmtMin(crm.medianResp)} · ${crm.untouched} uncalled`, crm.notReachablePct >= 0.25 ? "bad" : "");
+  }
+  const inScope = accounts.filter((a) => a.inScope && a.conv >= 3);
+  if (inScope.length > 1) { const best = inScope.slice().sort((a, b) => a.cpl - b.cpl)[0], worst = inScope.slice().sort((a, b) => b.cpl - a.cpl)[0]; row("Read", "Most efficient account", best.name, `CPL ${fmtAED(best.cpl)} · cost per booking ${fmtAED(best.costPerBooking)}`, "good"); row("Read", "Most expensive account", worst.name, `CPL ${fmtAED(worst.cpl)} · cost per booking ${fmtAED(worst.costPerBooking)}`, "bad"); }
+  const risk = centres.filter((c) => c.healthBand === "risk" && c.spend >= 1000).sort((a, b) => b.spend - a.spend);
+  row("Read", "Centres needing attention", risk.length ? String(risk.length) : "none", risk.slice(0, 5).map((c) => c.short).join(", "), risk.length ? "warn" : "good");
+  const scale = view.campaigns.filter((c) => c.status === "scale").length, fix = view.campaigns.filter((c) => c.status === "fix").length, pause = view.campaigns.filter((c) => c.status === "pause").length;
+  row("Read", "Campaign calls", `${scale} scale · ${fix} fix · ${pause} pause`, `of ${view.campaigns.length} campaigns`);
+  if (kwStats.totalCost) row("Read", "Keyword spend with no conversions", fmtAED(kwStats.wastedTotal), `${fmtPct(kwStats.wastedTotal / kwStats.totalCost, 0)} of spend · ${kwStats.wastedCount} keywords${kwStats.approx ? " (whole weeks)" : ""}`, kwStats.wastedTotal / kwStats.totalCost >= 0.35 ? "bad" : "warn");
+  const top = insights.filter((i) => i.sev === "critical" || i.sev === "good").slice(0, 3);
+  top.forEach((i, n) => row("Read", n === 0 ? "Biggest levers" : "", i.title, i.impact ? `≈ ${fmtAED(i.impact)} at stake` : "", i.sev === "good" ? "good" : "bad"));
+  return R;
+}
+
 export function executiveSummary(view, insights) {
   const { totals: t, period, crm, accounts, centres } = view;
   const s = [];

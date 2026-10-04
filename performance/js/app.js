@@ -3,7 +3,7 @@
 // ============================================================
 import { buildModel, ACCOUNTS, ACCOUNT_META } from "./parse.js";
 import { computeView, presets, normalizeFilter, shortCentre } from "./analytics.js";
-import { generateInsights, executiveSummary } from "./insights.js";
+import { generateInsights, executiveSummary, executiveRows } from "./insights.js";
 import { initCharts, forgetCharts } from "./charts.js";
 import * as P from "./pages.js";
 import { fetchSheet, parseSheetUrl, readFiles, explainError, googleSignIn, DEFAULT_TABS } from "./sheets.js";
@@ -15,7 +15,7 @@ const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [..
 const SETTINGS_LS = "vp-settings", CHAT_LS = "vp-chat";
 const S = {
   model: null, view: null, insights: [], summary: "", filter: {}, page: "overview", ui: {}, source: { mode: "snapshot" }, chat: [], busy: false,
-  settings: { sheetUrl: "", sheetId: "", gid: "", tabs: DEFAULT_TABS.join("\n"), mode: "public", apiKey: "", clientId: "", theme: "dark", chatOpen: true, autoSync: true },
+  settings: { sheetUrl: "", sheetId: "", gid: "", tabs: DEFAULT_TABS.join("\n"), mode: "public", apiKey: "", clientId: "", theme: "light", chatOpen: true, autoSync: true },
 };
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_LS, JSON.stringify(S.settings)); } catch (e) {} };
 const loadSettings = () => { try { Object.assign(S.settings, JSON.parse(localStorage.getItem(SETTINGS_LS) || "{}")); } catch (e) {} };
@@ -33,17 +33,17 @@ function recompute() {
   S.view = computeView(S.model, S.filter);
   S.insights = generateInsights(S.view);
   S.summary = executiveSummary(S.view, S.insights);
+  S.execRows = executiveRows(S.view, S.insights);
 }
 let netCache = { key: null, view: null, insights: null };
 function networkView() { const key = S.filter.start + "|" + S.filter.end + "|" + (S.source.lastSync || ""); if (netCache.key !== key) { const view = S.filter.account === "all" && !S.filter.centre ? S.view : computeView(S.model, { start: S.filter.start, end: S.filter.end, account: "all", centre: null }); netCache = { key, view, insights: view === S.view ? S.insights : generateInsights(view) }; } return netCache; }
-const ctx = () => ({ model: S.model, view: S.view, insights: S.insights, summary: S.summary, ui: S.ui, source: S.source, weeklyFor: (extra) => computeView(S.model, { ...S.filter, ...extra }).trend.weekly, get networkView() { return networkView().view; }, get networkInsights() { return networkView().insights; } });
+const ctx = () => ({ model: S.model, view: S.view, insights: S.insights, summary: S.summary, execRows: S.execRows, ui: S.ui, source: S.source, weeklyFor: (extra) => computeView(S.model, { ...S.filter, ...extra }).trend.weekly, get networkView() { return networkView().view; }, get networkInsights() { return networkView().insights; } });
 
 // ---------- render ----------
 function renderShell() {
   $("#nav").innerHTML = P.PAGES.map((p) => `<button data-nav="${p.key}" class="${S.page === p.key ? "on" : ""}">${P.icon(p.icon)}${p.label}${p.key === "actions" ? `<span class="k">${S.insights.filter((i) => i.sev !== "info").length}</span>` : ""}</button>`).join("");
-  $("#mobile-nav").innerHTML = P.PAGES.filter((p) => p.key !== "data").map((p) => `<button data-nav="${p.key}" class="${S.page === p.key ? "on" : ""}">${P.icon(p.icon)}${p.label.split(" ")[0]}</button>`).join("");
   const src = $("#source"); const live = S.source.mode === "sheet"; src.className = "source" + (live ? " live" : "");
-  src.innerHTML = `<b><span class="dot"></span>${live ? "Google Sheets" : S.source.mode === "files" ? "Uploaded files" : "Sample data"}</b><span>${esc(S.model.meta.period)} · to ${fmtDate(S.model.meta.dataUpTo)}</span><span class="faint">${S.source.lastSync ? "synced " + relTime(S.source.lastSync) : "bundled snapshot"}</span><div class="acts"><button class="btn ghost sm" data-open-data>${live ? "Settings" : "Connect"}</button>${S.settings.sheetId ? `<button class="btn ghost sm" data-sync>Sync</button>` : ""}</div>`;
+  src.innerHTML = `<span class="dot"></span><b>${live ? "Google Sheets" : S.source.mode === "files" ? "Uploaded files" : "Sample data"}</b><span class="faint">${esc(S.model.meta.period)} · to ${fmtDate(S.model.meta.dataUpTo)}${S.source.lastSync ? " · synced " + relTime(S.source.lastSync) : ""}</span><button class="btn ghost sm" data-open-data>${live ? "Settings" : "Connect"}</button>${S.settings.sheetId ? `<button class="btn ghost sm" data-sync>Sync</button>` : ""}`;
   $$(".theme button").forEach((b) => b.classList.toggle("on", b.dataset.theme === S.settings.theme));
   $("#btn-chat").classList.toggle("on", S.settings.chatOpen);
 }
@@ -236,8 +236,9 @@ function bind() {
 // ---------- boot ----------
 async function boot() {
   loadSettings();
+  if (!S.settings.themeV2) { S.settings.theme = "light"; S.settings.themeV2 = true; saveSettings(); }
   if (!("chatOpen" in JSON.parse(localStorage.getItem(SETTINGS_LS) || "{}")) && window.innerWidth < 1100) S.settings.chatOpen = false;
-  document.documentElement.dataset.theme = S.settings.theme || "dark";
+  document.documentElement.dataset.theme = S.settings.theme || "light";
   $("#shell").classList.toggle("chat-closed", S.settings.chatOpen === false);
   try { S.chat = JSON.parse(localStorage.getItem(CHAT_LS) || "[]"); } catch (e) { S.chat = []; }
   S.page = location.hash.replace("#", "") || "overview";
