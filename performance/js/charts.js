@@ -14,8 +14,9 @@ const ticksFor = (max, n = 4) => { const t = []; for (let i = 0; i <= n; i++) t.
 const fmtTick = (v) => (Math.abs(v) >= 1000 ? (v / 1000).toFixed(v % 1000 ? 1 : 0) + "k" : v % 1 ? v.toFixed(1) : String(v));
 
 /** Line / area chart. series: [{name, color, values:[number|null], dash?}] */
-export function lineChart({ labels, series, height = 220, fmt = fmtNum, area = false, highlight = null, xTick = (l, i) => l, yMax = null, markers = true, annotations = [] }) {
-  const id = nid(); const W = 720, H = height, padL = 44, padR = 14, padT = 14, padB = 30;
+export function lineChart(args) {
+  const { labels, series, height = 220, fmt = fmtNum, area = false, highlight = null, xTick = (l, i) => l, yMax = null, markers = true, annotations = [], width = 720, fit = false } = args;
+  const id = nid(); const W = width, H = height, padL = 44, padR = 14, padT = 14, padB = 30;
   const n = labels.length; const iw = W - padL - padR, ih = H - padT - padB;
   const max = yMax ?? scaleNice(Math.max(1e-9, ...series.flatMap((s) => s.values.filter((v) => v != null))));
   const x = (i) => padL + (n > 1 ? (i * iw) / (n - 1) : iw / 2), y = (v) => padT + ih - (v / max) * ih;
@@ -33,9 +34,9 @@ export function lineChart({ labels, series, height = 220, fmt = fmtNum, area = f
     if (markers && n <= 40) for (const [px, py] of pts) g += `<circle cx="${px}" cy="${py}" r="3" fill="${color}" class="cv-dot"/>`;
   });
   g += `<line class="cv-cross" x1="0" x2="0" y1="${padT}" y2="${padT + ih}" style="display:none"/>`;
-  REG.set(id, { type: "line", labels, series, fmt, padL, padR, W, n });
+  REG.set(id, { type: "line", labels, series, fmt, padL, padR, W, n, args: fit ? args : null });
   const legend = series.length > 1 ? `<div class="cv-legend">${series.map((s, i) => `<span><i style="background:${s.color || SERIES[i]}"></i>${esc(s.name)}</span>`).join("")}</div>` : "";
-  return `<div class="cv cv-line" data-cv="${id}" tabindex="0" role="img" aria-label="${esc(series.map((s) => s.name).join(", "))} over ${n} points"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg>${legend}</div>`;
+  return `<div class="cv cv-line${fit ? " cv-fit" : ""}" data-cv="${id}" tabindex="0" role="img" aria-label="${esc(series.map((s) => s.name).join(", "))} over ${n} points"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg>${legend}</div>`;
 }
 
 /** Vertical bar chart, grouped or stacked. */
@@ -160,3 +161,21 @@ export function initCharts() {
   document.addEventListener("mouseout", (e) => { if (e.target.closest?.(".cv") && !e.relatedTarget?.closest?.(".cv")) { hideTip(); document.querySelectorAll(".cv-cross").forEach((c) => (c.style.display = "none")); document.querySelectorAll(".cv-bar.on").forEach((b) => b.classList.remove("on")); } });
 }
 export function forgetCharts() { REG.clear(); }
+
+/** Re-draw `fit` line charts at their real pixel width, so the height stays fixed
+ *  and the axis text stays at its CSS size instead of scaling with the card. */
+export function fitCharts(root = document) {
+  root.querySelectorAll(".cv-fit").forEach((host) => {
+    const reg = REG.get(host.dataset.cv); if (!reg?.args) return;
+    const w = Math.round(host.clientWidth); if (!w || Math.abs(w - reg.W) < 4) return;
+    REG.delete(host.dataset.cv);
+    host.outerHTML = lineChart({ ...reg.args, width: w });
+  });
+}
+let fitRaf = 0;
+if (typeof window !== "undefined") window.addEventListener("resize", () => { cancelAnimationFrame(fitRaf); fitRaf = requestAnimationFrame(() => fitCharts()); });
+if (typeof ResizeObserver !== "undefined") {
+  const ro = new ResizeObserver(() => { cancelAnimationFrame(fitRaf); fitRaf = requestAnimationFrame(() => fitCharts()); });
+  const watch = () => { const m = document.getElementById("main"); if (m) ro.observe(m); };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", watch); else watch();
+}

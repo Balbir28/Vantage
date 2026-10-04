@@ -75,6 +75,7 @@ export function overview(view, ctx) {
   const specRows = specialties.filter((s) => s.spend > 0 || s.crmLeads > 0);
   const cplMed = median(centres.filter((c) => c.conv >= 1).map((c) => c.cpl));
   return `<div class="page">
+    ${leadGapBanner(view)}
     <div class="card"><div class="head"><div><div class="eyebrow">Executive read · ${esc(view.scopeLabel)}</div></div><div class="grow"></div>${askBtn("Give me the executive summary and the three things to do this week", "Discuss with the analyst")}</div>${execDeck(view, ctx)}</div>
     ${kpiStrip(view)}
     <div class="card"><div class="head"><div><h3>Ad accounts</h3><div class="sub">Click a row to focus every page on that account · colours carry into every chart</div></div></div>${accTable}</div>
@@ -105,9 +106,10 @@ function execDeck(view, ctx) {
     <div class="deck-tile" style="--c:var(--sapphire)"><div class="k"><span>Media spend</span><i></i></div><div class="n">${fmtAEDc(t.spend)}</div><div class="m">${t.budget ? `<span><b>${fmtPct(t.pacing, 0)}</b> of ${fmtAEDc(t.budget)} budget</span>` : "<span>No budget loaded</span>"}</div>${t.budget ? gauge(t.pacing, 1, t.pacing > 1.1 ? "bad" : t.pacing < 0.85 ? "warn" : "") : ""}</div>
     <div class="deck-tile" style="--c:var(--viridian)"><div class="k"><span>Form conversions</span><i></i></div><div class="n">${fmtNum(t.conv)}</div><div class="m"><span>CPL <b>${fmtAED(t.cpl)}</b></span><span>conv rate <b>${fmtPct(t.convRate, 1)}</b></span></div>${gauge(Math.min(1, (view.baseline.cplMedian || 0) / (t.cpl || 1)), 1)}</div>
     <div class="deck-tile" style="--c:var(--gamboge)"><div class="k"><span>Click-to-calls</span><i></i></div><div class="n">${t.calls == null ? "—" : fmtNum(t.calls)}</div><div class="m">${t.calls ? `<span><b>${fmtAED(t.costPerCall)}</b> per call</span><span>ext <b>${fmtNum(t.callExt)}</b> · page <b>${fmtNum(t.ga4)}</b></span>` : "<span>Fill the Click to Calls tab in the sheet</span>"}</div>${t.calls ? gauge(t.calls / Math.max(1, t.calls + t.conv), 1) : ""}</div>
-    <div class="deck-tile" style="--c:var(--rufous)"><div class="k"><span>Bookings</span><i></i></div><div class="n">${fmtNum(t.booked)}<small>/ ${fmtNum(t.crmLeads)} leads</small></div><div class="m"><span>booking <b>${fmtPct(t.bookingPct, 0)}</b></span><span>cost/booking <b>${fmtAEDc(t.costPerBooking)}</b></span></div>${gauge(t.bookingPct, 0.5, t.bookingPct != null && t.bookingPct < 0.35 ? "bad" : "")}</div>
-    <div class="deck-tile clickable" style="--c:var(--rust)" data-nav="crm" role="button" tabindex="0" title="Open Leads & CRM"><div class="k"><span>Not reachable</span><i></i></div><div class="n">${fmtNum(t.notReachable)}<small>/ ${fmtNum(t.crmLeads)} leads</small></div><div class="m"><span><b>${fmtPct(t.notReachablePct, 0)}</b> of CRM leads</span><span>never answered the call centre</span></div>${gauge(t.notReachablePct, 1, (t.notReachablePct || 0) >= 0.25 ? "bad" : "warn")}</div>
-    <div class="deck-tile clickable" style="--c:var(--alloy)" data-nav="crm" role="button" tabindex="0" title="Open Leads & CRM"><div class="k"><span>Pending</span><i></i></div><div class="n">${fmtNum(t.pending)}<small>/ ${fmtNum(t.crmLeads)} leads</small></div><div class="m"><span><b>${fmtPct(t.crmLeads ? t.pending / t.crmLeads : null, 0)}</b> of CRM leads</span><span>${fmtNum(crm.untouched)} not yet called</span></div>${gauge(t.crmLeads ? t.pending / t.crmLeads : 0, 1, "warn")}</div>
+    <div class="deck-tile clickable" style="--c:var(--mint)" data-nav="crm" role="button" tabindex="0" title="Open Leads & CRM"><div class="k"><span>CRM leads</span><i></i></div><div class="n">${fmtNum(t.crmLeads)}</div><div class="m"><span><b>${fmtNum(t.crmLeads / (view.period.days || 1), 1)}</b> per day</span><span>cost/lead <b>${fmtAED(t.costPerCrmLead)}</b></span>${t.leadsAll ? `<span>vs <b>${fmtNum(t.leadsAll)}</b> ad leads (forms + calls)</span>` : ""}</div>${t.leadsAll ? gauge(t.crmLeads / t.leadsAll, 1) : ""}</div>
+    <div class="deck-tile r2" style="--c:var(--rufous)"><div class="k"><span>Bookings</span><i></i></div><div class="n">${fmtNum(t.booked)}<small>/ ${fmtNum(t.crmLeads)} leads</small></div><div class="m"><span>booking <b>${fmtPct(t.bookingPct, 0)}</b></span><span>cost/booking <b>${fmtAEDc(t.costPerBooking)}</b></span></div>${gauge(t.bookingPct, 0.5, t.bookingPct != null && t.bookingPct < 0.35 ? "bad" : "")}</div>
+    <div class="deck-tile r2 clickable" style="--c:var(--rust)" data-nav="crm" role="button" tabindex="0" title="Open Leads & CRM"><div class="k"><span>Not reachable</span><i></i></div><div class="n">${fmtNum(t.notReachable)}<small>/ ${fmtNum(t.crmLeads)} leads</small></div><div class="m"><span><b>${fmtPct(t.notReachablePct, 0)}</b> of CRM leads</span><span>never answered the call centre</span></div>${gauge(t.notReachablePct, 1, (t.notReachablePct || 0) >= 0.25 ? "bad" : "warn")}</div>
+    <div class="deck-tile r2 clickable" style="--c:var(--alloy)" data-nav="crm" role="button" tabindex="0" title="Open Leads & CRM"><div class="k"><span>Pending</span><i></i></div><div class="n">${fmtNum(t.pending)}<small>/ ${fmtNum(t.crmLeads)} leads</small></div><div class="m"><span><b>${fmtPct(t.crmLeads ? t.pending / t.crmLeads : null, 0)}</b> of CRM leads</span><span>${fmtNum(crm.untouched)} not yet called</span></div>${gauge(t.crmLeads ? t.pending / t.crmLeads : 0, 1, "warn")}</div>
   </div>`;
   const icons = { Media: "M3 12h4l3-8 4 16 3-8h4", "Call centre": "M5 4h4l2 5-3 2a11 11 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 6a2 2 0 0 1 2-2", Read: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z" };
   const groups = ["Media", "Call centre", "Read"].filter((g) => rows.some((r) => r.group === g && r.label));
@@ -203,11 +205,21 @@ export function keywords(view, ctx) {
   </div>`;
 }
 
+
+// Warn when the Lead Data tab is missing whole days — lead and booking totals would be understated.
+function leadGapBanner(view) {
+  const g = view.leadGaps || []; if (!g.length) return "";
+  const missing = g.reduce((s, x) => s + x.days, 0);
+  const spans = g.map((x) => `<b>${x.from === x.to ? fmtDate(x.from) : `${fmtDate(x.from)} – ${fmtDate(x.to)}`}</b>`).join(", ");
+  return `<div class="banner">⚠ <div>No call-centre leads in the sheet for ${spans} (${missing} day${missing === 1 ? "" : "s"}). The Lead Data tab looks incomplete, so CRM leads, bookings and booking rates for this range are understated. Re-export the call-centre leads for the full range, paste at A1 of <b>Lead Data</b>, then Sync.</div></div>`;
+}
+
 // ---------- CTR ----------
 export function ctr(view, ctx) {
   const t = view.totals, d = view.trend.daily, inR = (x) => x.date >= view.period.start && x.date <= view.period.end;
   const dr = d.filter(inR), dl = dr.map((x) => fmtDate(x.date));
   const ctrMed = median(view.campaigns.filter((c) => c.impr >= 300).map((c) => c.ctr));
+  const cplMed = view.baseline?.cplMedian;
   const ctrCls = (v) => (isNil(v) || !ctrMed ? "" : v >= ctrMed * 1.25 ? "okay" : v <= ctrMed * 0.6 || v < 0.05 ? "bad" : "");
   const ctrCol = { key: "ctr", label: "CTR", render: (r) => fmtPct(r.ctr, 2), cls: (r) => ctrCls(r.ctr) };
   const lowCamps = view.campaigns.filter((c) => c.impr >= 500 && c.ctr != null && c.ctr < 0.05);
@@ -226,11 +238,9 @@ export function ctr(view, ctx) {
       ${kpi({ label: "Campaigns under 5% CTR", value: fmtNum(lowCamps.length), sub: lowCamps.length ? `≈ <b>${fmtNum(lostClicks)}</b> clicks missed vs an 8% search CTR` : "None with real volume" })}
     </div>
     <div class="card"><div class="head"><div><h3>Daily CTR by ad account</h3><div class="sub">${esc(view.period.label)} · clicks ÷ impressions per day</div></div><div class="grow"></div>${askBtn("Why is CTR low on some campaigns and how do I lift it?", "Ask")}</div>
-      ${dr.length > 1 ? lineChart({ labels: dl, series: accSeries.length ? accSeries : [{ name: "CTR", color: "var(--sapphire)", values: dr.map((x) => (x.ctr == null ? null : x.ctr * 100)) }], fmt: (v) => (v == null ? "—" : v.toFixed(2) + "%"), height: 230, xTick: (l, i) => (dr.length > 20 ? (i % 3 === 0 ? l : "") : l), markers: dr.length <= 20 }) : nothing("Pick a range longer than one day to see the trend.")}</div>
-    <div class="grid g2">
-      <div class="card"><div class="head"><div><h3>Ad accounts</h3><div class="sub">Click a row to focus every page on it</div></div></div>${table("ctrAcc", [C.name("Ad account", (r) => r.name, (r) => r.blurb), C.num("impr", "Impr", fmtCompact), C.num("clicks", "Clicks"), ctrCol, C.num("cpc", "CPC", fmtAED), C.num("convRate", "Conv rate", (v) => fmtPct(v, 1))], view.accounts.filter((a) => a.inScope && a.impr > 0), { defKey: "ctr", rowAttr: (r) => `class="clickable" data-filter-account="${esc(r.name)}"` })}</div>
-      <div class="card"><div class="head"><div><h3>Match types</h3><div class="sub">Click a row to open those keywords</div></div></div>${table("ctrMatch", [C.name("Match type", (r) => r.match, (r) => `${r.n} keywords`), C.num("impr", "Impr", fmtCompact), C.num("clicks", "Clicks"), ctrCol, C.num("cost", "Cost", fmtAEDc)], view.kwStats.matchTypes, { defKey: "impr", rowAttr: (r) => `class="clickable" data-kw-filter="match=${esc(r.match)}"` })}</div>
-    </div>
+      ${dr.length > 1 ? lineChart({ labels: dl, series: accSeries.length ? accSeries : [{ name: "CTR", color: "var(--sapphire)", values: dr.map((x) => (x.ctr == null ? null : x.ctr * 100)) }], fmt: (v) => (v == null ? "—" : v.toFixed(2) + "%"), height: 190, fit: true, xTick: (l, i) => (dr.length > 20 ? (i % 3 === 0 ? l : "") : l), markers: dr.length <= 20 }) : nothing("Pick a range longer than one day to see the trend.")}</div>
+    <div class="card"><div class="head"><div><h3>Ad accounts</h3><div class="sub">CTR alongside what the clicks convert into · click a row to focus every page on it</div></div></div>${table("ctrAcc", [C.name("Ad account", (r) => r.name, (r) => r.blurb), C.num("impr", "Impr", fmtCompact), C.num("clicks", "Clicks"), ctrCol, C.num("cpc", "CPC", fmtAED), C.num("conv", "Conv", (v) => fmtNum(v, 1)), C.num("convRate", "Conv rate", (v) => fmtPct(v, 1)), { key: "cpl", label: "CPL", render: (r) => fmtAED(r.cpl), cls: (r) => cplClass(r.cpl, cplMed) }], view.accounts.filter((a) => a.inScope && a.impr > 0), { defKey: "ctr", rowAttr: (r) => `class="clickable" data-filter-account="${esc(r.name)}"` })}</div>
+    <div class="card"><div class="head"><div><h3>Match types</h3><div class="sub">Click a row to open those keywords</div></div></div>${table("ctrMatch", [C.name("Match type", (r) => r.match, (r) => `${r.n} keywords`), C.num("impr", "Impr", fmtCompact), C.num("clicks", "Clicks"), ctrCol, C.num("cost", "Cost", fmtAEDc), C.num("conv", "Conv", (v) => fmtNum(v, 1)), C.num("convRate", "Conv rate", (v) => fmtPct(v, 1)), { key: "cpl", label: "CPL", render: (r) => fmtAED(r.cpl), cls: (r) => cplClass(r.cpl, cplMed) }], view.kwStats.matchTypes, { defKey: "impr", rowAttr: (r) => `class="clickable" data-kw-filter="match=${esc(r.match)}"` })}</div>
     <div class="card"><div class="head"><div><h3>Hospitals</h3><div class="sub">Green = 25% above the campaign median · red = under 5% or far below median</div></div></div>${table("ctrCentres", [C.name("Hospital", (r) => r.short, (r) => r.account), C.num("impr", "Impr", fmtCompact), C.num("clicks", "Clicks"), ctrCol, C.num("cpc", "CPC", fmtAED), C.num("conv", "Conv"), C.num("convRate", "Conv rate", (v) => fmtPct(v, 1)), C.num("is", "Impr. share", (v) => fmtPct(v, 0))], view.centres.filter((c) => c.impr > 0), { defKey: "impr", rowAttr: (r) => `class="clickable" data-open-centre="${esc(r.name)}"` })}</div>
     <div class="card"><div class="head"><div><h3>Campaigns</h3><div class="sub">Sort by CTR to find ads that do not match the search</div></div></div>${table("ctrCamps", [C.name("Campaign", (r) => r.name.replace(/^Alo_NMC_Search_/, ""), (r) => `${shortCentre(r.centre || "—")} · ${accShort(r.account)}`), C.num("impr", "Impr", fmtCompact), C.num("clicks", "Clicks"), ctrCol, C.num("cpc", "CPC", fmtAED), C.num("conv", "Conv", (v) => fmtNum(v, 1)), C.num("convRate", "Conv rate", (v) => fmtPct(v, 1))], view.campaigns.filter((c) => c.impr > 0), { defKey: "impr", limit: 60, rowAttr: (r) => `class="clickable" data-open-campaign="${r.id}"` })}</div>
     <div class="grid g2">
@@ -281,10 +291,11 @@ function callsAccountTables(view, c) {
 
 // ---------- LEADS & CRM ----------
 export function crm(view, ctx) {
-  const c = view.crm; if (!c.leads) return `<div class="page">${nothing("No call-centre leads in this scope. Load the Lead Data export to see CRM outcomes.")}</div>`;
+  const c = view.crm; if (!c.leads) return `<div class="page">${leadGapBanner(view)}${nothing("No call-centre leads in this scope. Load the Lead Data export to see CRM outcomes.")}</div>`;
   const net = c.bookingPct;
   const centreRows = view.centres.filter((x) => x.crmLeads > 0);
   return `<div class="page">
+    ${leadGapBanner(view)}
     <div class="kpis">
       ${kpi({ label: "Leads logged", value: fmtNum(c.leads), sub: `${fmtNum(c.leads / view.period.days, 1)} per day` })}
       ${kpi({ label: "Booked", value: fmtNum(c.booked), sub: `Booking rate <b>${fmtPct(c.bookingPct, 0)}</b> · when reached <b>${fmtPct(c.reachedPct, 0)}</b>` })}

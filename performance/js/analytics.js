@@ -227,10 +227,24 @@ export function computeView(model, rawFilter = {}) {
   // --- CRM detail ---
   const crm = crmDetail(leadsScope, centreRows, specialties, totals);
 
+  // --- lead-data gaps: runs of 3+ days with no call-centre leads at all (network-wide) ---
+  // A whole hospital network never has zero leads for days on end, so this means the
+  // Lead Data tab is missing a slice of the export (e.g. a month pasted from the 20th).
+  const leadGaps = [];
+  if (model.leads.length) {
+    const perDay = new Set(model.leads.map((l) => l.created && l.created.slice(0, 10)));
+    const gEnd = end < last ? end : last; let run = null;
+    for (let d = start; d <= gEnd; d = addDays(d, 1)) {
+      if (!perDay.has(d)) { if (!run) run = { from: d, to: d, days: 0 }; run.to = d; run.days++; }
+      else if (run) { if (run.days >= 3) leadGaps.push(run); run = null; }
+    }
+    if (run && run.days >= 3) leadGaps.push(run);
+  }
+
   const scopeLabel = [centre ? shortCentre(centre) : account === "all" ? "All ad accounts" : account, rangeLabel(start, end, first, last, model)].join(" · ");
   return { filter, period: { start, end, days, first, last, dim, label: rangeLabel(start, end, first, last, model) }, scopeLabel, baseline,
     totals, accounts: accountRows, centres: centreRows, campaigns: campRows, specialties, keywords, kwStats, trend, crm, c2c: c2cView,
-    flags: { callsEstimated, hasC2c, hasCalls: tCalls, hasLeads: model.leads.length > 0, hasSummary: !!model.summary, hasDailyCalls: model.dailyCalls.length > 0, hasBudget: tBudget } };
+    leadGaps, flags: { callsEstimated, hasC2c, hasCalls: tCalls, hasLeads: model.leads.length > 0, hasSummary: !!model.summary, hasDailyCalls: model.dailyCalls.length > 0, hasBudget: tBudget } };
 }
 
 export function rangeLabel(start, end, first, last, model) {
@@ -276,7 +290,7 @@ function keywordStats(kws) {
   const byMatch = new Map();
   for (const k of spent) { const key = k.match || "Unknown"; let m = byMatch.get(key); if (!m) { m = { match: key, cost: 0, conv: 0, clicks: 0, impr: 0, n: 0 }; byMatch.set(key, m); } m.cost += k.cost; m.conv += k.conv; m.clicks += k.clicks; m.impr += k.impr; m.n++; }
   const totalCost = sum(spent, "cost");
-  const matchTypes = [...byMatch.values()].map((m) => ({ ...m, cpl: div(m.cost, m.conv), share: div(m.cost, totalCost), ctr: div(m.clicks, m.impr) })).sort((a, b) => b.cost - a.cost);
+  const matchTypes = [...byMatch.values()].map((m) => ({ ...m, cpl: div(m.cost, m.conv), share: div(m.cost, totalCost), ctr: div(m.clicks, m.impr), cpc: div(m.cost, m.clicks), convRate: div(m.conv, m.clicks) })).sort((a, b) => b.cost - a.cost);
   const bands = [{ band: "QS 1–3", min: 1, max: 3 }, { band: "QS 4–6", min: 4, max: 6 }, { band: "QS 7–10", min: 7, max: 10 }, { band: "No score", min: null, max: null }].map((b) => ({ ...b, cost: 0, impr: 0, conv: 0, clicks: 0, n: 0 }));
   for (const k of spent) { const b = k.qs == null ? bands[3] : bands.find((x) => x.min != null && k.qs >= x.min && k.qs <= x.max) || bands[3]; b.cost += k.cost; b.impr += k.impr; b.conv += k.conv; b.clicks += k.clicks; b.n++; }
   for (const b of bands) { b.share = div(b.cost, totalCost); b.cpl = div(b.cost, b.conv); }

@@ -4,7 +4,7 @@
 import { buildModel, ACCOUNTS, ACCOUNT_META } from "./parse.js";
 import { computeView, presets, normalizeFilter, shortCentre } from "./analytics.js";
 import { generateInsights, executiveSummary, executiveRows, reallocationPlan } from "./insights.js";
-import { initCharts, forgetCharts } from "./charts.js";
+import { initCharts, forgetCharts, fitCharts } from "./charts.js";
 import * as P from "./pages.js";
 import { fetchSheet, parseSheetUrl, readFiles, explainError, googleSignIn, DEFAULT_TABS } from "./sheets.js";
 import { kvGet, kvSet } from "./idb.js";
@@ -68,6 +68,7 @@ function renderPage() {
   forgetCharts();
   const c = ctx();
   $("#page").innerHTML = P[page.key](v, c);
+  fitCharts($("#page"));
   animateNumbers($("#page"));
   $("#main").scrollTop = 0;
   document.title = `Vantage Pulse — ${page.label}`;
