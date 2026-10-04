@@ -8,6 +8,7 @@ import { initCharts, forgetCharts } from "./charts.js";
 import * as P from "./pages.js";
 import { fetchSheet, parseSheetUrl, readFiles, explainError, googleSignIn, DEFAULT_TABS } from "./sheets.js";
 import { kvGet, kvSet } from "./idb.js";
+import { loadSnapshot } from "./pack.js";
 import { ask, suggestions, mdToHtml, AI, testProvider } from "./analyst.js";
 import { esc, fmtDate, relTime } from "./format.js";
 
@@ -217,7 +218,7 @@ function bind() {
   // data modal
   $("#data-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeData(); });
   $("#d-connect").addEventListener("click", async () => { S.settings.sheetUrl = $("#d-url").value.trim(); S.settings.tabs = $("#d-tabs").value; S.settings.apiKey = $("#d-apikey").value.trim(); S.settings.clientId = $("#d-clientid").value.trim(); S.settings.autoSync = $("#d-autosync").checked; saveSettings(); await syncSheet(); });
-  $("#d-sample").addEventListener("click", async () => { const m = await fetch("data/snapshot.json").then((r) => r.json()); S.filter = { preset: "mtd" }; setModel(m, { mode: "snapshot", sheetId: "", lastSync: null }); kvSet("model", null); kvSet("source", null); render(true); closeData(); toast("Using the bundled sample"); });
+  $("#d-sample").addEventListener("click", async () => { const m = await loadSnapshot(); S.filter = { preset: "mtd" }; setModel(m, { mode: "snapshot", sheetId: "", lastSync: null }); kvSet("model", null); kvSet("source", null); render(true); closeData(); toast("Using the bundled sample"); });
   const drop = $("#d-drop"), fileIn = $("#d-file");
   drop.addEventListener("click", () => fileIn.click()); drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileIn.click(); } });
   fileIn.addEventListener("change", () => loadFiles([...fileIn.files]));
@@ -244,7 +245,7 @@ async function boot() {
   S.page = location.hash.replace("#", "") || "overview";
   initCharts(); bind();
   let model = await kvGet("model"), source = (await kvGet("source")) || null;
-  if (!model) { model = await fetch("data/snapshot.json").then((r) => r.json()); source = { mode: "snapshot" }; }
+  if (!model) { model = await loadSnapshot(); source = { mode: "snapshot" }; }
   setModel(model, source || { mode: "snapshot" });
   render(true); renderChat();
   if (!S.chat.length) { S.chat.push({ role: "assistant", content: `Hi — I'm your performance analyst. I'm reading **${S.model.meta.period}** across ${S.model.centres.length} centres and ${S.model.ads?.campaigns.length || 0} campaigns.\n\nAsk me anything, or tap a suggestion below.` }); renderChat(); }
