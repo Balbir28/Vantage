@@ -16,7 +16,7 @@ const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [..
 const SETTINGS_LS = "vp-settings", CHAT_LS = "vp-chat";
 const S = {
   model: null, view: null, insights: [], summary: "", filter: {}, page: "overview", ui: {}, source: { mode: "snapshot" }, chat: [], busy: false,
-  settings: { sheetUrl: "", sheetId: "", gid: "", tabs: DEFAULT_TABS.join("\n"), mode: "public", apiKey: "", clientId: "", theme: "light", chatOpen: true, autoSync: true },
+  settings: { sheetUrl: "", sheetId: "", gid: "", tabs: DEFAULT_TABS.join("\n"), mode: "public", apiKey: "", clientId: "", theme: "light", chatOpen: true, autoSync: true, refreshMin: 15 },
 };
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_LS, JSON.stringify(S.settings)); } catch (e) {} };
 const loadSettings = () => { try { Object.assign(S.settings, JSON.parse(localStorage.getItem(SETTINGS_LS) || "{}")); } catch (e) {} };
@@ -38,13 +38,13 @@ function recompute() {
 }
 let netCache = { key: null, view: null, insights: null };
 function networkView() { const key = S.filter.start + "|" + S.filter.end + "|" + (S.source.lastSync || ""); if (netCache.key !== key) { const view = S.filter.account === "all" && !S.filter.centre ? S.view : computeView(S.model, { start: S.filter.start, end: S.filter.end, account: "all", centre: null }); netCache = { key, view, insights: view === S.view ? S.insights : generateInsights(view) }; } return netCache; }
-const ctx = () => ({ model: S.model, view: S.view, insights: S.insights, summary: S.summary, execRows: S.execRows, ui: S.ui, source: S.source, weeklyFor: (extra) => computeView(S.model, { ...S.filter, ...extra }).trend.weekly, get networkView() { return networkView().view; }, get networkInsights() { return networkView().insights; } });
+const ctx = () => ({ model: S.model, view: S.view, insights: S.insights, summary: S.summary, execRows: S.execRows, ui: S.ui, settings: S.settings, source: S.source, weeklyFor: (extra) => computeView(S.model, { ...S.filter, ...extra }).trend.weekly, get networkView() { return networkView().view; }, get networkInsights() { return networkView().insights; } });
 
 // ---------- render ----------
 function renderShell() {
   $("#nav").innerHTML = P.PAGES.map((p) => `<button data-nav="${p.key}" class="${S.page === p.key ? "on" : ""}">${P.icon(p.icon)}${p.label}${p.key === "actions" ? `<span class="k">${S.insights.filter((i) => i.sev !== "info").length}</span>` : ""}</button>`).join("");
   const src = $("#source"); const live = S.source.mode === "sheet"; src.className = "source" + (live ? " live" : "");
-  src.innerHTML = `<span class="dot"></span><b>${live ? "Google Sheets" : S.source.mode === "files" ? "Uploaded files" : "Sample data"}</b><span class="faint">${esc(S.model.meta.period)} · to ${fmtDate(S.model.meta.dataUpTo)}${S.source.lastSync ? " · synced " + relTime(S.source.lastSync) : ""}</span><button class="btn ghost sm" data-open-data>${live ? "Settings" : "Connect"}</button>${S.settings.sheetId ? `<button class="btn ghost sm" data-sync>Sync</button>` : ""}`;
+  src.innerHTML = `<span class="dot"></span><b>${live ? "Google Sheets" : S.source.mode === "files" ? "Uploaded files" : "Sample data"}</b><span class="faint">${esc(S.model.meta.period)} · to ${fmtDate(S.model.meta.dataUpTo)}${S.source.lastSync ? " · synced " + relTime(S.source.lastSync) : ""}${live && S.settings.autoSync !== false ? ` · auto every ${S.settings.refreshMin || 15} min` : ""}</span><button class="btn ghost sm" data-open-data>${live ? "Settings" : "Connect"}</button>${S.settings.sheetId ? `<button class="btn ghost sm" data-sync>Sync</button>` : ""}`;
   $$(".theme button").forEach((b) => b.classList.toggle("on", b.dataset.theme === S.settings.theme));
   $("#btn-chat").classList.toggle("on", S.settings.chatOpen);
 }
@@ -64,6 +64,7 @@ function renderPage() {
   forgetCharts();
   const c = ctx();
   $("#page").innerHTML = P[page.key](v, c);
+  animateNumbers($("#page"));
   $("#main").scrollTop = 0;
   document.title = `Vantage Pulse — ${page.label}`;
 }
@@ -119,7 +120,7 @@ async function askChat(q) {
 // ---------- data modal ----------
 function openData() {
   const s = S.settings, m = $("#data-modal");
-  $("#d-url").value = s.sheetUrl || ""; $("#d-tabs").value = s.tabs || DEFAULT_TABS.join("\n"); $("#d-apikey").value = s.apiKey || ""; $("#d-clientid").value = s.clientId || ""; $("#d-autosync").checked = s.autoSync !== false;
+  $("#d-url").value = s.sheetUrl || ""; $("#d-tabs").value = s.tabs || DEFAULT_TABS.join("\n"); $("#d-apikey").value = s.apiKey || ""; $("#d-clientid").value = s.clientId || ""; $("#d-autosync").checked = s.autoSync !== false; $("#d-refresh").value = s.refreshMin || 15;
   $$("#d-modes button").forEach((b) => b.classList.toggle("on", b.dataset.mode === (s.mode || "public")));
   $$("[data-mode-only]").forEach((el) => (el.style.display = el.dataset.modeOnly.split(",").includes(s.mode || "public") ? "" : "none"));
   $("#d-steps").innerHTML = ""; $("#d-msg").innerHTML = "";
@@ -217,7 +218,7 @@ function bind() {
   ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askChat(ta.value); ta.value = ""; } });
   // data modal
   $("#data-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeData(); });
-  $("#d-connect").addEventListener("click", async () => { S.settings.sheetUrl = $("#d-url").value.trim(); S.settings.tabs = $("#d-tabs").value; S.settings.apiKey = $("#d-apikey").value.trim(); S.settings.clientId = $("#d-clientid").value.trim(); S.settings.autoSync = $("#d-autosync").checked; saveSettings(); await syncSheet(); });
+  $("#d-connect").addEventListener("click", async () => { S.settings.sheetUrl = $("#d-url").value.trim(); S.settings.tabs = $("#d-tabs").value; S.settings.apiKey = $("#d-apikey").value.trim(); S.settings.clientId = $("#d-clientid").value.trim(); S.settings.autoSync = $("#d-autosync").checked; S.settings.refreshMin = Math.max(2, +$("#d-refresh").value || 15); saveSettings(); scheduleRefresh(); await syncSheet(); });
   $("#d-sample").addEventListener("click", async () => { const m = await loadSnapshot(); S.filter = { preset: "mtd" }; setModel(m, { mode: "snapshot", sheetId: "", lastSync: null }); kvSet("model", null); kvSet("source", null); render(true); closeData(); toast("Using the bundled sample"); });
   const drop = $("#d-drop"), fileIn = $("#d-file");
   drop.addEventListener("click", () => fileIn.click()); drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileIn.click(); } });
@@ -232,6 +233,26 @@ function bind() {
   $("#ai-save").addEventListener("click", () => { AI.set({ provider: $("#ai-provider").value, keys: { gemini: $("#ai-key-gemini").value.trim(), claude: $("#ai-key-claude").value.trim() }, models: { gemini: $("#ai-model-gemini").value.trim() || "gemini-2.0-flash", claude: $("#ai-model-claude").value.trim() || "claude-sonnet-5-5" } }); renderChat(); $("#ai-status").textContent = "Saved"; toast("AI settings saved"); });
   $("#ai-test").addEventListener("click", async () => { const p = $("#ai-provider").value; if (p === "none") { $("#ai-status").textContent = "Pick a provider first"; return; } $("#ai-status").textContent = "Testing…"; try { await testProvider(p, $(`#ai-key-${p}`).value.trim(), $(`#ai-model-${p}`).value.trim()); $("#ai-status").textContent = "✓ Key works"; } catch (e) { $("#ai-status").textContent = "✕ " + e.message; } });
   window.addEventListener("hashchange", () => { const h = location.hash.replace("#", ""); if (h && h !== S.page) { S.page = h; renderShell(); renderPage(); } });
+}
+
+// ---------- auto refresh (the daily-paste workflow) ----------
+let refreshT;
+function scheduleRefresh() {
+  clearInterval(refreshT);
+  const min = Math.max(2, +S.settings.refreshMin || 15);
+  refreshT = setInterval(() => { if (S.settings.autoSync !== false && S.settings.sheetId && S.source.mode === "sheet" && document.visibilityState === "visible") syncSheet({ silent: true }); }, min * 60000);
+}
+// count-up on the big numbers (CSS-free, respects reduced motion)
+function animateNumbers(root) {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  root.querySelectorAll(".deck-tile .n, .kpi .v").forEach((el) => {
+    const txt = el.firstChild && el.firstChild.nodeType === 3 ? el.firstChild : null; if (!txt) return;
+    const m = txt.nodeValue.match(/^(.*?)(\d[\d,]*)(\.\d+)?(.*)$/); if (!m) return;
+    const target = parseFloat((m[2] + (m[3] || "")).replace(/,/g, "")), dec = m[3] ? m[3].length - 1 : 0, start = performance.now(), dur = 650;
+    const fmt = (v) => m[1] + v.toLocaleString("en-AE", { minimumFractionDigits: dec, maximumFractionDigits: dec }) + m[4];
+    const step = (now) => { const p = Math.min(1, (now - start) / dur), e = 1 - Math.pow(1 - p, 3); txt.nodeValue = fmt(target * e); if (p < 1) requestAnimationFrame(step); else txt.nodeValue = m[0]; };
+    requestAnimationFrame(step);
+  });
 }
 
 // ---------- boot ----------
@@ -250,6 +271,8 @@ async function boot() {
   render(true); renderChat();
   if (!S.chat.length) { S.chat.push({ role: "assistant", content: `Hi — I'm your performance analyst. I'm reading **${S.model.meta.period}** across ${S.model.centres.length} centres and ${S.model.ads?.campaigns.length || 0} campaigns.\n\nAsk me anything, or tap a suggestion below.` }); renderChat(); }
   if (S.settings.autoSync !== false && S.settings.sheetId && S.source.mode === "sheet") syncSheet({ silent: true });
+  scheduleRefresh();
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S.settings.autoSync !== false && S.settings.sheetId && S.source.mode === "sheet" && Date.now() - Date.parse(S.source.lastSync || 0) > 5 * 60000) syncSheet({ silent: true }); });
   window.__vp = { S, go, setFilter, openDrawer, askChat };
 }
 boot().catch((e) => { console.error(e); $("#page").innerHTML = `<div class="empty"><h3>Could not start</h3>${esc(e.message)}</div>`; });

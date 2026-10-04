@@ -114,8 +114,6 @@ export function executiveRows(view, insights) {
   const scale = view.campaigns.filter((c) => c.status === "scale").length, fix = view.campaigns.filter((c) => c.status === "fix").length, pause = view.campaigns.filter((c) => c.status === "pause").length;
   row("Read", "Campaign calls", `${scale} scale · ${fix} fix · ${pause} pause`, `of ${view.campaigns.length} campaigns`);
   if (kwStats.totalCost) row("Read", "Keyword spend with no conversions", fmtAED(kwStats.wastedTotal), `${fmtPct(kwStats.wastedTotal / kwStats.totalCost, 0)} of spend · ${kwStats.wastedCount} keywords${kwStats.approx ? " (whole weeks)" : ""}`, kwStats.wastedTotal / kwStats.totalCost >= 0.35 ? "bad" : "warn");
-  const top = insights.filter((i) => i.sev === "critical" || i.sev === "good").slice(0, 3);
-  top.forEach((i, n) => row("Read", n === 0 ? "Biggest levers" : "", i.title, i.impact ? `≈ ${fmtAED(i.impact)} at stake` : "", i.sev === "good" ? "good" : "bad"));
   return R;
 }
 

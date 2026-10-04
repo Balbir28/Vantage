@@ -13,8 +13,29 @@ export) exactly as they download, and derives everything else itself:
 - **AI analyst** — a chat panel that answers from the live numbers (no key needed) and,
   with a Gemini or Claude key, reasons over the full data pack
 
-Zero-build static app (HTML + CSS + ES modules). Deploys with the rest of Vantage on
-GitHub Pages at `/performance/`.
+Zero-build static app (HTML + CSS + ES modules), glass UI on the client's ten-swatch palette
+(sapphire · viridian · mint · sand · gamboge · rufous), Sora + Manrope + IBM Plex Mono type.
+Deploys with the rest of Vantage on GitHub Pages at `/performance/`.
+
+## The daily workflow (paste → it fetches itself)
+
+This is the operating model the app is built around:
+
+1. **Share the sheet once** — Share → General access → *Anyone with the link* → Viewer.
+   (Private sheet? Use *Google sign-in* in Connect; it needs an OAuth Client ID.)
+2. **Connect once** — open the dashboard → **Connect** → paste the sheet link → **Connect & sync**.
+   Leave *Re-sync automatically* on. The link is remembered on that device.
+3. **Paste data every day** — download the Google Ads keyword report and the call-centre export
+   the usual way and paste them at `A1` of **Google Ads Data** and **Lead Data**, replacing what
+   is there. No reshaping, no renaming.
+4. **Open the dashboard** — it re-reads the sheet on open, again every 15 minutes while it stays
+   open (configurable), and whenever you return to the tab after 5+ minutes away. Every account,
+   hospital, campaign, keyword and CRM view recomputes and the actions re-rank. **Sync** in the
+   header refreshes on demand.
+
+The synced month is cached in the browser (IndexedDB), so the dashboard opens instantly and then
+refreshes in the background. The header chip shows the source, the data date and when it last
+synced.
 
 ## Connect your sheet
 
@@ -90,6 +111,7 @@ performance/
 ├── index.html            # shell: sidebar, filter row, pages, chat panel, drawers, data modal
 ├── styles/perf.css       # design system (dark + light), validated chart palette
 ├── js/
+│   ├── pack.js           # compact on-disk form of the sample + loader
 │   ├── csv.js            # RFC-4180 CSV parser
 │   ├── parse.js          # tab detection by header signature → normalised model
 │   ├── analytics.js      # filter → view: accounts, centres, campaigns, keywords, trends, CRM
@@ -100,7 +122,7 @@ performance/
 │   ├── sheets.js         # Google Sheets connector (public / API key / OAuth) + file upload
 │   ├── idb.js            # IndexedDB cache so a synced month survives reloads
 │   └── app.js            # state, routing, filters, chat, modal, events
-├── data/snapshot.json    # bundled sample month (anonymised)
+├── data/snapshot*.json   # bundled sample month (anonymised, packed in parts)
 └── tools/build-snapshot.mjs  # regenerate the sample from a folder of per-tab CSVs
 ```
 

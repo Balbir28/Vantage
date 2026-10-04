@@ -74,7 +74,7 @@ export function overview(view, ctx) {
   const specRows = specialties.filter((s) => s.spend > 0 || s.crmLeads > 0);
   const cplMed = median(centres.filter((c) => c.conv >= 1).map((c) => c.cpl));
   return `<div class="page">
-    <div class="card"><div class="head"><div><div class="eyebrow">Executive read · ${esc(view.scopeLabel)}</div></div><div class="grow"></div>${askBtn("Give me the executive summary and the three things to do this week", "Discuss with the analyst")}</div>${execTable(ctx.execRows)}</div>
+    <div class="card"><div class="head"><div><div class="eyebrow">Executive read · ${esc(view.scopeLabel)}</div></div><div class="grow"></div>${askBtn("Give me the executive summary and the three things to do this week", "Discuss with the analyst")}</div>${execDeck(view, ctx)}</div>
     ${kpiStrip(view)}
     <div class="card"><div class="head"><div><h3>Ad accounts</h3><div class="sub">Click a row to focus every page on that account · colours carry into every chart</div></div></div>${accTable}</div>
     <div class="card"><div class="head"><div><h3>Week by week</h3><div class="sub">Scoped to ${esc(view.scopeLabel.split(" · ")[0])} · CPL shows the change on the previous week</div></div></div>${weekTable}</div>
@@ -101,9 +101,30 @@ export function overview(view, ctx) {
   </div>`;
 }
 
-function execTable(rows) {
-  const groups = [...new Set(rows.map((r) => r.group))];
-  return `<div class="exec">${groups.map((g) => `<table class="exec-t"><thead><tr><th colspan="3">${esc(g)}</th></tr></thead><tbody>${rows.filter((r) => r.group === g).map((r) => `<tr><td class="l">${esc(r.label)}</td><td class="v ${r.tone}">${esc(r.value)}</td><td class="n">${esc(r.note)}</td></tr>`).join("")}</tbody></table>`).join("")}</div>`;
+function execDeck(view, ctx) {
+  const t = view.totals, crm = view.crm, rows = ctx.execRows, ins = ctx.insights;
+  const net = view.accounts.filter((a) => a.inScope && a.spend > 0);
+  // network pulse: mean centre health weighted by spend
+  const w = view.centres.reduce((s, c) => s + c.spend, 0) || 1, pulse = Math.round(view.centres.reduce((s, c) => s + c.health * c.spend, 0) / w);
+  const verdict = ctx.summary.split(". ").slice(2, 4).join(". ").replace(/\.?$/, ".");
+  const gauge = (pct, expected = 1, tone = "") => `<div class="gauge"><i class="${tone}" style="width:${Math.min(100, (pct || 0) * 100).toFixed(1)}%"></i><s style="left:${Math.min(100, expected * 100).toFixed(1)}%"></s></div>`;
+  const tiles = `<div class="deck-tiles">
+    <div class="deck-tile" style="--c:var(--sapphire)"><div class="k"><span>Media spend</span><i></i></div><div class="n">${fmtAEDc(t.spend)}</div><div class="m">${t.budget ? `<span><b>${fmtPct(t.pacing, 0)}</b> of ${fmtAEDc(t.budget)} budget</span>` : "<span>No budget loaded</span>"}</div>${t.budget ? gauge(t.pacing, 1, t.pacing > 1.1 ? "bad" : t.pacing < 0.85 ? "warn" : "") : ""}</div>
+    <div class="deck-tile" style="--c:var(--viridian)"><div class="k"><span>Form conversions</span><i></i></div><div class="n">${fmtNum(t.conv)}</div><div class="m"><span>CPL <b>${fmtAED(t.cpl)}</b></span><span>conv rate <b>${fmtPct(t.convRate, 1)}</b></span></div>${gauge(Math.min(1, (view.baseline.cplMedian || 0) / (t.cpl || 1)), 1)}</div>
+    <div class="deck-tile" style="--c:var(--gamboge)"><div class="k"><span>Click-to-calls</span><i></i></div><div class="n">${t.calls == null ? "—" : fmtNum(t.calls)}</div><div class="m">${t.calls ? `<span><b>${fmtAED(t.costPerCall)}</b> per call</span><span>ext <b>${fmtNum(t.callExt)}</b> · page <b>${fmtNum(t.ga4)}</b></span>` : "<span>Add the call columns on the week tabs</span>"}</div>${t.calls ? gauge(t.calls / Math.max(1, t.calls + t.conv), 1) : ""}</div>
+    <div class="deck-tile" style="--c:var(--rufous)"><div class="k"><span>Bookings</span><i></i></div><div class="n">${fmtNum(t.booked)}<small>/ ${fmtNum(t.crmLeads)} leads</small></div><div class="m"><span>booking <b>${fmtPct(t.bookingPct, 0)}</b></span><span>cost/booking <b>${fmtAEDc(t.costPerBooking)}</b></span></div>${gauge(t.bookingPct, 0.5, t.bookingPct != null && t.bookingPct < 0.35 ? "bad" : "")}</div>
+  </div>`;
+  const icons = { Media: "M3 12h4l3-8 4 16 3-8h4", "Call centre": "M5 4h4l2 5-3 2a11 11 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 6a2 2 0 0 1 2-2", Read: "M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20V2H6.5A2.5 2.5 0 0 0 4 4.5v15z" };
+  const groups = ["Media", "Call centre", "Read"].filter((g) => rows.some((r) => r.group === g && r.label));
+  const ledgers = `<div class="deck-grid">${groups.map((g) => { const rs = rows.filter((r) => r.group === g && r.label); return `<div class="ledger"><div class="lh">${icon(icons[g])}${esc(g)}<span class="grow"></span><span class="cnt">${rs.length} rows</span></div>${rs.map((r) => { const openAttr = /account/i.test(r.label) && ACCOUNTS.includes(r.value) ? `data-filter-account="${esc(r.value)}"` : /centres needing/i.test(r.label) ? `data-nav="hospitals"` : /campaign calls/i.test(r.label) ? `data-nav="campaigns"` : /keyword/i.test(r.label) ? `data-nav="keywords"` : ""; return `<div class="lrow ${openAttr ? "clickable" : ""}" ${openAttr}><div class="ll">${esc(r.label)}</div><div class="lv"><b class="${r.tone}">${esc(r.value)}</b>${r.note ? `<small>${esc(r.note)}</small>` : ""}</div></div>`; }).join("")}</div>`; }).join("")}</div>`;
+  const top = ins.filter((i) => i.sev === "critical" || i.sev === "good").slice(0, 3);
+  const levers = top.length ? `<div class="levers">${top.map((i) => { const c = i.sev === "good" ? "var(--viridian)" : "var(--rufous)"; const attr = i.entity ? `data-open-centre="${esc(i.entity)}"` : i.scope === "keyword" ? `data-nav="keywords"` : i.scope === "campaign" ? `data-nav="campaigns"` : i.scope === "crm" ? `data-nav="crm"` : `data-nav="actions"`; return `<div class="lever" style="--c:${c}" ${attr} role="button" tabindex="0"><div class="lk"><b>${i.sev === "good" ? "Opportunity" : "Critical"}</b><span>· ${esc(i.scope)}</span></div><div class="lt">${esc(i.title)}</div><div class="la">${esc(i.action)}</div>${i.impact ? `<div class="li">${fmtAEDc(i.impact)}<small>at stake</small></div>` : ""}</div>`; }).join("")}</div>` : "";
+  return `<div class="deck">
+    <div class="deck-head">${ring(pulse, { size: 64, stroke: 6, label: "pulse" })}<div><div class="t">${esc(view.scopeLabel)}</div><div class="s">Network pulse · spend-weighted centre health · ${view.centres.length} centres · ${view.campaigns.length} campaigns</div></div><div class="grow" style="flex:1"></div><div class="verdict">${esc(verdict)}</div></div>
+    ${tiles}
+    ${ledgers}
+    ${top.length ? `<div class="eyebrow" style="margin-top:2px">Biggest levers · ranked by money at stake</div>${levers}` : ""}
+  </div>`;
 }
 
 function computeDailyFor(ctx, account) {
@@ -247,8 +268,14 @@ export function data(view, ctx) {
     </div>
     ${unmapped.length || leadsNoCentre ? `<div class="banner">⚠ <div>${unmapped.length ? `<b>${unmapped.length} campaigns</b> could not be matched to a centre: ${esc(unmapped.slice(0, 6).join(", "))}${unmapped.length > 6 ? "…" : ""}. Add their centre token on the <b>Centre List</b> tab. ` : ""}${leadsNoCentre ? `<b>${leadsNoCentre} leads</b> have a branch name that is not in the centre list.` : ""}</div></div>` : ""}
     ${recon.length ? `<div class="card"><div class="head"><div><h3>Reconciliation against the sheet's own MTD summary</h3><div class="sub">The app recomputes everything from the raw exports — small gaps mean the sheet's formulas and the dump disagree</div></div></div>${table("recon", [C.name("Metric", (r) => r.metric), C.num("sheet", "Sheet MTD", (v) => fmtNum(v, v % 1 ? 1 : 0)), C.num("app", "Recomputed", (v) => fmtNum(v, v % 1 ? 1 : 0)), { key: "gap", label: "Gap", render: (r) => (r.gap == null ? "—" : `<span class="${Math.abs(r.gap) > 0.03 ? "bad" : "okay"}">${fmtDelta(r.gap, 1)}</span>`) }], recon.map(([metric, sheet, app]) => ({ metric, sheet, app, gap: sheet ? app / sheet - 1 : null })), { defKey: "metric" })}</div>` : ""}
-    <div class="card"><div class="head"><div><h3>How to update next month</h3><div class="sub">No reshaping — the app reads the dumps exactly as they download</div></div></div>
-      <ol class="prose" style="margin-left:18px"><li><b>Google Ads:</b> download the keyword-level report (Day · Campaign · Account · Ad group · Keyword · match type · QS · Impr · Clicks · Cost · Conversions · Impression share · Lost IS (rank) · Phone calls). Paste into the <b>Google Ads Data</b> tab or drop the CSV here.</li><li><b>Call centre:</b> export leads (ID · Status · Reason · Branch · Department · Priority · Response Time · Created At). Paste into <b>Lead Data</b> or drop the CSV.</li><li><b>Optional:</b> budgets per centre, a campaign-token → centre list, and the typed call columns on the week tabs. Without them the app still works; it just shows “—” for calls and pacing.</li><li>Press <b>Sync</b>. Centres, accounts, campaigns, keywords and CRM outcomes are all derived automatically.</li></ol></div>
+    <div class="card"><div class="head"><div><h3>Daily workflow — paste into the sheet, the dashboard fetches itself</h3><div class="sub">One-time connection, then zero clicks: the app re-reads the sheet when it opens and every ${ctx.settings.refreshMin || 15} minutes while it stays open</div></div><div class="grow"></div>${src.sheetId ? `<span class="sync-state"><i></i> auto-refresh ${ctx.settings.autoSync === false ? "off" : "on"}</span>` : ""}</div>
+      <div class="guide">
+        <div class="gstep"><div class="no">01</div><h4>Share the sheet once</h4><p>In Google Sheets: Share → General access → <b>Anyone with the link · Viewer</b>. Nothing else changes in the sheet. Private sheet? Use <b>Google sign-in</b> in Connect instead.</p></div>
+        <div class="gstep"><div class="no">02</div><h4>Connect once</h4><p>Click <b>Connect</b>, paste the sheet link, press <b>Connect &amp; sync</b>. The link is remembered on this device. Tick <b>Re-sync automatically</b> (default on).</p></div>
+        <div class="gstep"><div class="no">03</div><h4>Paste data every day</h4><p>Download the Google Ads keyword report and the call-centre export the usual way. Paste them at <code>A1</code> of <b>Google Ads Data</b> and <b>Lead Data</b>, replacing what is there. No reshaping, no renaming.</p></div>
+        <div class="gstep"><div class="no">04</div><h4>That's it</h4><p>Open the dashboard: it fetches the latest rows, recomputes every account, hospital, campaign, keyword and CRM view, and re-ranks the actions. Press <b>Sync</b> to refresh on demand.</p></div>
+      </div>
+      <p class="small muted" style="margin-top:14px">Tabs are recognised by their <b>headers</b>, so extra tabs, renamed tabs and a new month all work. Optional extras that unlock more: budgets per centre (pacing), the typed call columns on the week tabs (click-to-calls), a Centre List for brand-new centres.</p></div>
   </div>`;
 }
 
