@@ -86,6 +86,18 @@ export function generateInsights(view) {
     const sorted = accIn.filter((a) => a.conv >= 5).sort((a, b) => a.cpl - b.cpl);
     if (sorted.length >= 2) { const lo = sorted[0], hi = sorted[sorted.length - 1]; if (hi.cpl >= 2 * lo.cpl) push(out, { sev: "info", scope: "account", title: `${hi.name} CPL ${fmtAED(hi.cpl)} vs ${lo.name} ${fmtAED(lo.cpl)}`, detail: `Cost per booking: ${fmtAED(hi.costPerBooking)} vs ${fmtAED(lo.costPerBooking)}. Spend share ${fmtPct(hi.share, 0)} vs ${fmtPct(lo.share, 0)}.`, action: "Budgets should follow cost per booking across accounts, not historic allocations.", impact: null }); }
   }
+  // ---- 9b. the strategist's layer ----
+  const tracking = campaigns.filter((c) => c.clicks >= 80 && c.conv < 0.5);
+  if (tracking.length) push(out, { sev: "critical", scope: "measurement", title: `${tracking.length} campaign${tracking.length > 1 ? "s" : ""} with ${fmtNum(tracking.reduce((s, c) => s + c.clicks, 0))} clicks and no conversions — check tracking before touching bids`, detail: tracking.slice(0, 4).map((c) => `${c.name} (${c.clicks} clicks)`).join(" · "), action: "Verify the conversion tag fires on these landing pages (GTM preview + Google Ads diagnostics). Zero conversions at this click volume is more often a measurement gap than a demand gap; Smart Bidding on broken data will spend blind.", impact: tracking.reduce((s, c) => s + c.spend, 0), entities: tracking.map((c) => c.name) });
+  const scaleSet = campaigns.filter((c) => c.status === "scale" && c.conv >= 5);
+  if (scaleSet.length) push(out, { sev: "info", scope: "bidding", title: `${scaleSet.length} campaigns are ready for Target CPA bidding`, detail: `Each has 5+ conversions in the period and a CPL under the network median (${fmtAED(netCpl)}). Suggested tCPA ≈ 1.1× current CPL to buy the lost rank share without a CPL shock.`, action: `Move them to tCPA (or a portfolio strategy per specialty); set the target 10% above today's CPL, lift budgets 20–30%, and review after 2 weeks of learning.`, impact: null, entities: scaleSet.map((c) => c.name) });
+  const callHeavy = t.calls && t.conv ? t.calls / (t.calls + t.conv) : null;
+  if (callHeavy != null && callHeavy >= 0.8) push(out, { sev: "info", scope: "structure", title: `${fmtPct(callHeavy, 0)} of all leads arrive as calls — the account is a call business`, detail: `${fmtNum(t.calls)} click-to-calls vs ${fmtNum(t.conv)} form conversions. Form CPL alone undervalues the campaigns that drive calls.`, action: "Import calls as conversions (call extension + GA4 call-click), judge campaigns on blended cost per lead, and test call-only ads with ad-schedule bids on the call centre's staffed hours.", impact: null });
+  const spec = view.specialties.filter((x) => x.conv >= 8 && x.spend >= 2000);
+  if (spec.length >= 3) { const bySp = spec.slice().sort((a, b) => a.cpl - b.cpl); const lo = bySp[0], hi = bySp[bySp.length - 1]; if (hi.cpl >= 2.5 * lo.cpl) push(out, { sev: "info", scope: "budget", title: `Specialty CPL spread: ${lo.name} ${fmtAED(lo.cpl)} vs ${hi.name} ${fmtAED(hi.cpl)}`, detail: `A ${(hi.cpl / lo.cpl).toFixed(1)}× gap between specialties on comparable spend.`, action: `Set specialty-level CPA targets instead of one account target; fund ${lo.name} to its impression-share ceiling before adding to ${hi.name}, and judge ${hi.name} on cost per booking and appointment value.`, impact: null }); }
+  const highIsLowConv = centres.filter((c) => (c.is || 0) >= 0.5 && c.conv >= 1 && centreCplMed && c.cpl >= 1.5 * centreCplMed);
+  for (const c of highIsLowConv.slice(0, 2)) push(out, { sev: "warn", scope: "structure", title: `${c.short} already owns ${fmtPct(c.is, 0)} impression share but converts expensively`, detail: `CPL ${fmtAED(c.cpl)}. More budget will not help — the auction is won; the page or the offer is losing.`, action: "Stop bidding up. Fix landing page speed, form length, trust signals (doctor profiles, insurance list) and test a WhatsApp CTA; add negatives from the search-terms report.", impact: null, entity: c.name });
+
   // ---- 10. impression share ----
   if (t.is != null && t.is < 0.35 && t.lostIs >= 0.4) push(out, { sev: "info", scope: "account", title: `Only ${fmtPct(t.is, 0)} impression share — ${fmtPct(t.lostIs, 0)} lost to rank`, detail: "Rank losses come from bids and Quality Score, not budget.", action: "Prioritise QS fixes and bid increases on the 'Scale' set; budget-driven losses are secondary here.", impact: null });
 
@@ -115,6 +127,37 @@ export function executiveRows(view, insights) {
   row("Read", "Campaign calls", `${scale} scale · ${fix} fix · ${pause} pause`, `of ${view.campaigns.length} campaigns`);
   if (kwStats.totalCost) row("Read", "Keyword waste", fmtAED(kwStats.wastedTotal), `${fmtPct(kwStats.wastedTotal / kwStats.totalCost, 0)} of spend · ${kwStats.wastedCount} keywords${kwStats.approx ? " (whole weeks)" : ""}`, kwStats.wastedTotal / kwStats.totalCost >= 0.35 ? "bad" : "warn");
   return R;
+}
+
+/** Budget reallocation plan: free money from pause/fix campaigns, fund scale campaigns to their ceilings. */
+export function reallocationPlan(view) {
+  const med = view.baseline.cplMedian; if (!med) return null;
+  const donors = view.campaigns.filter((c) => c.status === "pause" || (c.status === "fix" && c.spend >= 500)).map((c) => ({ ...c, free: c.status === "pause" ? c.spend : Math.round(c.spend * 0.4) })).sort((a, b) => b.free - a.free);
+  // a receiver can absorb at most 1.5× its current spend in one step, and no more than its lost rank share converts
+  const receivers = view.campaigns.filter((c) => c.status === "scale" && c.conv >= 3).map((c) => { const ceiling = (c.lost || 0) * (c.ctr || 0) * (c.convRate || 0); const room = Math.min(ceiling * c.cpl * 1.1, c.spend * 1.5); const extraConv = room / (c.cpl * 1.1); return { ...c, extraConv, room }; }).filter((c) => c.room >= 200).sort((a, b) => a.cpl - b.cpl);
+  let pool = donors.reduce((s, d) => s + d.free, 0);
+  const moves = [];
+  for (const r of receivers) { if (pool <= 100) break; const amt = Math.min(pool, r.room); const conv = amt / (r.cpl * 1.1); moves.push({ to: r.name, centre: r.centre, specialty: r.specialty, amount: Math.round(amt), cpl: r.cpl, expectedConv: conv, lostIs: r.lostIs }); pool -= amt; }
+  const totalFreed = donors.reduce((s, d) => s + d.free, 0), totalMoved = moves.reduce((s, m) => s + m.amount, 0), totalConv = moves.reduce((s, m) => s + m.expectedConv, 0);
+  const lostConv = donors.reduce((s, d) => s + (d.status === "pause" ? 0 : d.conv * 0.4), 0);
+  return { donors, moves, totalFreed, totalMoved, totalConv, lostConv, unallocated: Math.max(0, totalFreed - totalMoved), netConv: totalConv - lostConv, currentCpl: view.totals.cpl, projectedCpl: view.totals.spend && (view.totals.conv + totalConv - lostConv) > 0 ? view.totals.spend / (view.totals.conv + totalConv - lostConv) : null };
+}
+
+/** The tactical playbook: findings grouped into the pillars a senior PPC lead reviews every week. */
+export const PILLARS = [
+  { key: "budget", label: "Budget & pacing", scopes: ["account", "budget", "centre"], icon: "M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" },
+  { key: "bidding", label: "Bidding & impression share", scopes: ["bidding", "campaign"], icon: "M3 17l6-6 4 4 8-8M14 7h7v7" },
+  { key: "structure", label: "Structure, keywords & match types", scopes: ["keyword", "structure"], icon: "M4 7h16M4 12h10M4 17h7" },
+  { key: "landing", label: "Landing pages & offer", scopes: ["landing"], icon: "M4 4h16v16H4zM4 9h16M9 9v11" },
+  { key: "crm", label: "Call centre & lead handling", scopes: ["crm"], icon: "M5 4h4l2 5-3 2a11 11 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 6a2 2 0 0 1 2-2" },
+  { key: "measurement", label: "Measurement & trend", scopes: ["measurement", "trend"], icon: "M3 3v18h18M7 14l4-4 4 4 5-6" },
+];
+export function playbook(insights) {
+  const used = new Set();
+  // landing-page pillar first: it is derived from wording (info-only leads, page relevance, high IS but weak conversion)
+  const landingItems = insights.filter((i) => /landing page|information|page content|relevance|the page or the offer/i.test(i.action + " " + i.title)).slice(0, 5);
+  landingItems.forEach((i) => used.add(i.id));
+  return PILLARS.map((p) => p.key === "landing" ? { ...p, items: landingItems } : { ...p, items: insights.filter((i) => p.scopes.includes(i.scope) && !used.has(i.id)).slice(0, 5).map((i) => { used.add(i.id); return i; }) });
 }
 
 export function executiveSummary(view, insights) {

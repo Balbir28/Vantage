@@ -3,7 +3,7 @@
 // ============================================================
 import { buildModel, ACCOUNTS, ACCOUNT_META } from "./parse.js";
 import { computeView, presets, normalizeFilter, shortCentre } from "./analytics.js";
-import { generateInsights, executiveSummary, executiveRows } from "./insights.js";
+import { generateInsights, executiveSummary, executiveRows, reallocationPlan } from "./insights.js";
 import { initCharts, forgetCharts } from "./charts.js";
 import * as P from "./pages.js";
 import { fetchSheet, parseSheetUrl, readFiles, explainError, googleSignIn, DEFAULT_TABS } from "./sheets.js";
@@ -38,7 +38,7 @@ function recompute() {
 }
 let netCache = { key: null, view: null, insights: null };
 function networkView() { const key = S.filter.start + "|" + S.filter.end + "|" + (S.source.lastSync || ""); if (netCache.key !== key) { const view = S.filter.account === "all" && !S.filter.centre ? S.view : computeView(S.model, { start: S.filter.start, end: S.filter.end, account: "all", centre: null }); netCache = { key, view, insights: view === S.view ? S.insights : generateInsights(view) }; } return netCache; }
-const ctx = () => ({ model: S.model, view: S.view, insights: S.insights, summary: S.summary, execRows: S.execRows, ui: S.ui, settings: S.settings, source: S.source, weeklyFor: (extra) => computeView(S.model, { ...S.filter, ...extra }).trend.weekly, get networkView() { return networkView().view; }, get networkInsights() { return networkView().insights; } });
+const ctx = () => ({ model: S.model, view: S.view, insights: S.insights, summary: S.summary, execRows: S.execRows, ui: S.ui, settings: S.settings, reallocationPlan, source: S.source, weeklyFor: (extra) => computeView(S.model, { ...S.filter, ...extra }).trend.weekly, get networkView() { return networkView().view; }, get networkInsights() { return networkView().insights; } });
 
 // ---------- render ----------
 function renderShell() {

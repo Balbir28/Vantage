@@ -90,6 +90,26 @@ account). Click any account card to focus on it; open any hospital or campaign f
   *Fix* = CPL ≥ 1.8× median (or CTR < 5%); *Pause* = ≥ AED 300 with no conversions;
   *Watch* = too small to judge; *Hold* = within range.
 
+## The strategist layer
+
+The rule engine reasons the way a senior PPC lead reviews an account, and every finding carries
+the money at stake:
+
+- **Diagnose before prescribing** — zero conversions at high click volume is flagged as a
+  measurement problem first, not a bidding one; high impression share with a poor CPL is flagged
+  as a page/offer problem, not a budget one.
+- **Budget reallocation plan** (Actions page) — frees budget from pause/fix campaigns, funds the
+  cheap-and-capped ones up to their impression-share ceiling, and projects the net conversion
+  change and blended CPL. Receivers are capped at 1.5× their current spend per step.
+- **Tactical playbook** — findings grouped into the six pillars of a weekly review: budget &
+  pacing, bidding & impression share, structure/keywords/match types, landing pages & offer,
+  call centre & lead handling, measurement & trend.
+- **Bidding readiness** — campaigns with enough conversions and a sub-median CPL are called out
+  for Target CPA with a suggested target; call-heavy accounts are told to import calls as
+  conversions and judge on blended cost per lead.
+- The chat persona is the same strategist: it diagnoses, sizes in AED, sequences and names the
+  metric to watch.
+
 ## AI analyst
 
 The chat answers from the computed numbers instantly — rankings, comparisons, pacing, keyword

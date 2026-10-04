@@ -88,6 +88,14 @@ export function scatter({ points, height = 260, fmtX = fmtNum, fmtY = fmtNum, xL
   return `<div class="cv cv-scatter" data-cv="${id}" tabindex="0" role="img" aria-label="${esc(yLabel)} against ${esc(xLabel)}"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg></div>`;
 }
 
+/** Ranked bullet rows: one aligned row per entity — spend bar, CPL bullet vs median, booking rate. */
+export function bulletRows({ rows, median, fmtSpend = fmtNum, fmtCpl = fmtNum, onClickAttr = null, cplCap = null }) {
+  const maxSpend = Math.max(1e-9, ...rows.map((r) => r.spend || 0));
+  const cap = cplCap || Math.max(1e-9, ...rows.map((r) => Math.min(r.cpl || 0, (median || 1e9) * 4)));
+  const medPct = median ? Math.min(100, (median / cap) * 100) : null;
+  return `<div class="bl"><div class="bl-h"><span>Centre</span><span>Spend</span><span>CPL <small>vs median${median ? " " + fmtCpl(median) : ""}</small></span><span>Booking</span></div>${rows.map((r) => { const cplPct = r.cpl == null ? 0 : Math.min(100, (r.cpl / cap) * 100); const tone = r.cpl == null || !median ? "" : r.cpl <= 0.8 * median ? "good" : r.cpl >= 1.6 * median ? "bad" : "mid"; return `<div class="bl-r${onClickAttr ? " clickable" : ""}" ${onClickAttr ? `${onClickAttr}="${esc(r.key ?? r.label)}" role="button" tabindex="0"` : ""}><div class="bl-l"><i style="background:${r.color}"></i><div><b>${esc(r.label)}</b>${r.sub ? `<small>${esc(r.sub)}</small>` : ""}</div></div><div class="bl-s"><div class="bl-t"><i style="width:${((r.spend || 0) / maxSpend * 100).toFixed(1)}%;background:${r.color}"></i></div><b>${fmtSpend(r.spend)}</b></div><div class="bl-c"><div class="bl-t ${tone}"><i style="width:${cplPct.toFixed(1)}%"></i>${medPct != null ? `<s style="left:${medPct.toFixed(1)}%"></s>` : ""}</div><b class="${tone}">${r.cpl == null ? "—" : fmtCpl(r.cpl)}${r.cpl != null && r.cpl > cap ? " ▸" : ""}</b></div><div class="bl-b"><b>${r.bookingPct == null ? "—" : Math.round(r.bookingPct * 100) + "%"}</b><small>${r.booked ?? 0}/${r.leads ?? 0}</small></div></div>`; }).join("")}</div>`;
+}
+
 /** Heatmap grid: rows [{label, values:[]}], cols [labels] */
 export function heatmap({ rows, cols, fmt = fmtNum, hue = "var(--seq-rgb)" }) {
   const max = Math.max(1e-9, ...rows.flatMap((r) => r.values.filter((v) => v != null)));
