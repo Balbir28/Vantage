@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vantage Pulse — Paid Performance Intelligence</title>
+  <meta name="description" content="Google Sheets–powered paid performance intelligence: account, hospital and campaign level, with an AI analyst." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%239a8cf5'/><path d='M22 62l14-24 12 36 12-50 10 30 8-12' fill='none' stroke='white' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles/perf.css" />
+</head>
+<body>
+  <div class="bg" aria-hidden="true"></div>
+  <div class="shell" id="shell">
+    <aside class="side" aria-label="Navigation">
+      <div class="brand"><div class="mark" aria-hidden="true">V</div><div class="name">Vantage Pulse<small>Paid performance</small></div></div>
+      <div class="nav-label">Intelligence</div>
+      <nav class="nav" id="nav"></nav>
+      <div class="grow"></div>
+      <div class="source" id="source"></div>
+      <div class="theme" role="group" aria-label="Theme"><button data-theme="light">Light</button><button data-theme="dark">Dark</button></div>
+    </aside>
+
+    <main class="main" id="main">
+      <header class="top">
+        <div><h1 id="title">Overview</h1><div class="sub" id="subtitle"></div></div>
+        <div class="grow"></div>
+        <div class="filters" role="group" aria-label="Filters">
+          <div class="fsel"><label for="f-preset">Range</label><select id="f-preset"></select></div>
+          <div class="fsel dates"><label for="f-from">From</label><input type="date" id="f-from" /><label for="f-to">to</label><input type="date" id="f-to" /></div>
+          <div class="fsel"><label for="f-account">Ad account</label><select id="f-account"></select></div>
+          <div class="fsel"><label for="f-centre">Hospital</label><select id="f-centre"></select></div>
+          <button class="btn ghost icon" id="btn-chat" data-chat-toggle title="Toggle the analyst" aria-label="Toggle the analyst"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z"/></svg> Analyst</button>
+        </div>
+      </header>
+      <section id="page" aria-live="polite"></section>
+      <nav class="mobile-nav" id="mobile-nav" aria-label="Pages"></nav>
+    </main>
+
+    <aside class="chat" id="chat" aria-label="AI analyst">
+      <div class="ch"><div class="av" aria-hidden="true">✦</div><div><h3>Performance analyst</h3><div class="st"><i></i><span id="chat-status"></span></div></div><div style="flex:1"></div><button class="x" data-chat-clear title="Clear conversation" aria-label="Clear conversation">↺</button><button class="x" data-chat-toggle title="Close" aria-label="Close analyst">✕</button></div>
+      <div class="cm" id="chat-msgs"></div>
+      <div class="chips" id="chat-chips"></div>
+      <div class="mode" id="chat-mode"></div>
+      <div class="ci"><textarea id="chat-input" rows="1" placeholder="Ask about any hospital, campaign, keyword or the call centre…" aria-label="Ask the analyst"></textarea><button class="btn" id="chat-send" aria-label="Send">Ask</button></div>
+    </aside>
+  </div>
+
+  <div class="drawer-bg" id="drawer-bg"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drawer-title">
+    <div class="dh"><div style="flex:1;min-width:0"><h2 id="drawer-title"></h2><div class="sub" id="drawer-sub"></div></div><button class="x" id="drawer-close" aria-label="Close">✕</button></div>
+    <div class="db" id="drawer-body"></div>
+  </aside>
+
+  <div class="modal-bg" id="data-modal" aria-hidden="true">
+    <div class="modal card" role="dialog" aria-labelledby="d-title">
+      <div style="display:flex;align-items:flex-start;gap:12px"><div style="flex:1"><div class="eyebrow">Data source</div><h2 id="d-title">Connect your sheet</h2><p class="muted small">Paste the Google Sheets link. The app reads the tabs straight from the browser — no server, nothing stored outside this device.</p></div><button class="x" data-close-data aria-label="Close">✕</button></div>
+      <label class="fld"><span>Google Sheets link</span><input id="d-url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…/edit#gid=…" autocomplete="off" /></label>
+      <div class="modes" id="d-modes" role="group" aria-label="How to read the sheet">
+        <button data-mode="public">Public link<small>Share → Anyone with link → Viewer. No keys.</small></button>
+        <button data-mode="apikey">API key<small>Finds every tab automatically. Link-shareable sheet.</small></button>
+        <button data-mode="oauth">Google sign-in<small>Private sheets. Needs an OAuth Client ID.</small></button>
+      </div>
+      <label class="fld" data-mode-only="public"><span>Tab names to read <em>(one per line — tabs are recognised by their headers, so order and extra tabs don't matter)</em></span><textarea id="d-tabs"></textarea></label>
+      <label class="fld" data-mode-only="apikey"><span>Google API key</span><input id="d-apikey" type="password" placeholder="AIza…" autocomplete="off" /><div class="hint">Create one in Google Cloud → APIs & Services → Credentials, with the <b>Google Sheets API</b> enabled. Restrict it to this site's URL.</div></label>
+      <label class="fld" data-mode-only="oauth"><span>OAuth Client ID</span><input id="d-clientid" placeholder="…apps.googleusercontent.com" autocomplete="off" /><div class="hint">Google Cloud → Credentials → OAuth client (Web). Add this site's origin to “Authorised JavaScript origins”. Sign-in happens in a Google popup; the token stays in this tab.</div></label>
+      <label class="fld" style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="d-autosync" style="width:auto" /> <span style="margin:0">Re-sync automatically when the dashboard opens</span></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="d-connect">Connect &amp; sync</button><span class="faint small">or</span><button class="btn ghost" id="d-sample">Use the bundled sample</button></div>
+      <div class="steps" id="d-steps" style="margin-top:12px"></div><div id="d-msg" style="margin-top:10px"></div>
+      <hr style="border:0;border-top:1px solid var(--line);margin:20px 0" />
+      <div class="eyebrow">Or drop the exports</div>
+      <div class="drop" id="d-drop" tabindex="0" role="button" aria-label="Upload files"><b>Drop files here</b> or click to choose<br /><span class="small faint">Google Ads keyword export (.csv) · call-centre lead export (.csv) · or the whole workbook (.xlsx). Nothing needs reshaping.</span></div>
+      <input type="file" id="d-file" multiple accept=".csv,.tsv,.txt,.xlsx,.xlsm,.xls" style="display:none" />
+      <hr style="border:0;border-top:1px solid var(--line);margin:20px 0" />
+      <div class="eyebrow">AI analyst <span class="faint" style="font-weight:500;letter-spacing:0;text-transform:none">· optional</span></div>
+      <p class="muted small" style="margin:6px 0 4px">The chat already answers from the computed numbers. Add a key and it reasons over the whole data pack for open-ended questions. Keys stay in this browser and go straight to the provider.</p>
+      <label class="fld"><span>Provider</span><select id="ai-provider"><option value="none">None — computed answers only</option><option value="gemini">Google Gemini</option><option value="claude">Anthropic Claude</option></select></label>
+      <div data-ai-only="gemini"><label class="fld"><span>Gemini API key</span><input id="ai-key-gemini" type="password" placeholder="AIza…" autocomplete="off" /><div class="hint">Free at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.</div></label><label class="fld"><span>Model</span><input id="ai-model-gemini" placeholder="gemini-2.0-flash" /></label></div>
+      <div data-ai-only="claude"><label class="fld"><span>Anthropic API key</span><input id="ai-key-claude" type="password" placeholder="sk-ant-…" autocomplete="off" /><div class="hint">From <a href="https://console.anthropic.com/" target="_blank" rel="noopener">console.anthropic.com</a>. Browser-direct calls are enabled per request.</div></label><label class="fld"><span>Model</span><input id="ai-model-claude" placeholder="claude-sonnet-5-5" /></label></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn" id="ai-save">Save</button><button class="btn ghost" id="ai-test">Test key</button><span class="faint small" id="ai-status"></span></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
