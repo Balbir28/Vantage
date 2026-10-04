@@ -111,7 +111,7 @@ export function executiveRows(view, insights) {
   const row = (group, label, value, note = "", tone = "") => R.push({ group, label, value, note, tone });
   row("Media", "Spend", fmtAED(t.spend), t.budget ? `${fmtPct(t.pacing, 0)} of ${fmtAED(t.budget)} pro-rated budget` : "no budget loaded", t.budget ? (t.pacing < 0.85 ? "warn" : t.pacing > 1.1 ? "bad" : "good") : "");
   row("Media", "Form conversions", fmtNum(t.conv), `CPL ${fmtAED(t.cpl)}`);
-  row("Media", "Click-to-calls", t.calls == null ? "—" : fmtNum(t.calls), t.calls ? `${fmtAED(t.costPerCall)} per call${view.flags.callsEstimated ? " (est.)" : ""}` : "add the call columns");
+  row("Media", "Click-to-calls", t.calls == null ? "—" : fmtNum(t.calls), t.calls ? `${fmtAED(t.costPerCall)} per call${view.flags.callsEstimated ? " (est.)" : ""}` : "fill the Click to Calls tab");
   row("Media", "Impression share", fmtPct(t.is, 0), `${fmtPct(t.lostIs, 0)} lost to rank · CTR ${fmtPct(t.ctr, 1)} · CPC ${fmtAED(t.cpc)}`);
   if (crm.leads) {
     row("Call centre", "Leads logged", fmtNum(crm.leads), `${fmtNum(crm.leads / view.period.days, 1)} per day`);

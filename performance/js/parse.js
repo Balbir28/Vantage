@@ -12,7 +12,8 @@
 //    dailyCalls:[ { date, acc:{ account:{ext,ga4,total} } } ]
 //    ads:       { campaigns:[{name,account,centre,region,specialty}],
 //                 daily:[{c,d,w,impr,clicks,cost,conv,calls,elig,lost}],
-//                 keywords:[{c,adgroup,kw,match,w,qs,impr,clicks,cost,conv,elig,lost}] }  (one row per keyword per week)
+//                 keywords:[{c,adgroup,kw,match,d,w,qs,impr,clicks,cost,conv,elig,lost}] }  (one row per keyword per day)
+//    c2c:       [ { date, centre, account, ext, ga4, total } ]  (Click to Calls tab — typed daily per hospital)
 //    leads:     [ { id,status,reason,dept,centre,priority,created,respMin,week,agent,doctor } ]
 //  }
 // ============================================================
@@ -38,6 +39,8 @@ export function canonicalAccount(label) {
   if (/^ALL/.test(s)) return "ALL";
   return null;
 }
+
+const shortName = (name) => String(name).replace(/^NMC\s+/, "").replace(/Royal Hospital,\s*/, "RH ").replace(/Specialty Hospital,\s*/, "SH ").replace(/Royal Medical Centre,\s*/, "RMC ").replace(/Medical Centre,\s*/, "MC ").replace(/Medical Centre$/, "MC").replace(/, Dubai$/, "");
 
 // ---------- primitives ----------
 const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 };
@@ -166,6 +169,7 @@ export function detectKind(rows) {
     if (r.includes("campaign") && r.some((c) => /^impr/.test(c)) && r.includes("search keyword")) return { kind: "ads", header: i };
     if (r[0] === "id" && r.includes("status") && r.includes("reason")) return { kind: "leads", header: i };
     if (/(^| )centre$/.test(r[0] || "") && r.includes("impressions") && r.includes("booked")) return { kind: "centreTable", header: i };
+    if (r.includes("date") && r.some((c) => /^(hospital|centre|center|branch)( name)?$/.test(c)) && r.some((c) => /click to call|call ext|call click|call now|^total( calls)?$|^calls$/.test(c))) return { kind: "clickToCalls", header: i };
     if (r[0] === "date" && joined.includes("| total calls |")) return { kind: "dailyCalls", header: i };
     if (/(^| )centre$/.test(r[0] || "") && r.some((c) => c.startsWith("budget")) && r.length <= 6) return { kind: "budget", header: i };
     if (/campaign name contains/.test(r[0] || "")) return { kind: "centreList", header: i };
@@ -268,6 +272,30 @@ export function parseDailyCalls(rows, header) {
   return out;
 }
 
+/** Click to Calls tab — one row per day per hospital, typed daily:
+ *  Date | Ad Account | Hospital | Call Ext. | Page Call Now | Total Click-to-Calls
+ *  Blank number cells = not entered yet (skipped); 0 = zero calls. Total is optional (ext + page when blank). */
+export function parseClickToCalls(rows, header, ctx = {}) {
+  const H = rows[header].map(norm);
+  const find = (re) => H.findIndex((h) => re.test(h));
+  const col = { date: find(/^date$/), account: find(/account/), centre: find(/^(hospital|centre|center|branch)( name)?$/),
+    ext: find(/call ext|call click|extension/), ga4: find(/ga4|call now|page call|landing/), total: find(/^total|click to calls?$|^calls$/) };
+  const resolve = ccResolver(ctx.centreList, ctx.knownCentres);
+  const out = [], unmatched = new Set();
+  for (let i = header + 1; i < rows.length; i++) {
+    const r = rows[i], date = parseDate(cell(r, col.date), ctx.year), name = String(cell(r, col.centre) ?? "").trim();
+    if (!date || !name) continue;
+    const ext = col.ext >= 0 ? num(cell(r, col.ext)) : null, ga4 = col.ga4 >= 0 ? num(cell(r, col.ga4)) : null, tot = col.total >= 0 ? num(cell(r, col.total)) : null;
+    if (ext == null && ga4 == null && tot == null) continue; // not entered yet
+    const centre = resolve(name) || (ctx.shortNames && ctx.shortNames.get(norm(name))) || name;
+    if (ctx.knownCentres && !ctx.knownCentres.includes(centre)) unmatched.add(name);
+    const total = tot ?? (ext || 0) + (ga4 || 0);
+    out.push({ date, centre, account: canonicalAccount(cell(r, col.account)) || null, ext: ext ?? (ga4 == null ? total : 0), ga4: ga4 ?? 0, total });
+  }
+  out.unmatched = [...unmatched];
+  return out;
+}
+
 export function parseBudget(rows, header) {
   const out = [];
   for (let i = header + 1; i < rows.length; i++) {
@@ -338,9 +366,9 @@ export function parseAds(rows, header, ctx = {}) {
     dd.impr += impr; dd.clicks += clicks; dd.cost += cost; dd.conv += conv; dd.calls += calls; dd.elig += elig; dd.lost += lostW;
     const adgroup = String(cell(r, col.adgroup) ?? "").trim(), kw = String(cell(r, col.kw) ?? "").trim();
     const match = String(cell(r, col.match) ?? "").replace(/ match$/i, "").trim();
-    const kk = ci + "|" + adgroup + "|" + kw + "|" + match + "|" + w;
+    const kk = ci + "|" + adgroup + "|" + kw + "|" + match + "|" + d;
     let kd = kws.get(kk);
-    if (!kd) { kd = { c: ci, adgroup, kw, match, w, qs: null, impr: 0, clicks: 0, cost: 0, conv: 0, elig: 0, lost: 0 }; kws.set(kk, kd); }
+    if (!kd) { kd = { c: ci, adgroup, kw, match, d, w, qs: null, impr: 0, clicks: 0, cost: 0, conv: 0, elig: 0, lost: 0 }; kws.set(kk, kd); }
     kd.impr += impr; kd.clicks += clicks; kd.cost += cost; kd.conv += conv; kd.elig += elig; kd.lost += lostW;
     const qs = num(cell(r, col.qs)); if (qs != null) kd.qs = kd.qs == null ? qs : Math.max(kd.qs, qs); // latest/best observed
   }
@@ -442,8 +470,17 @@ export function buildModel(tabs, opts = {}) {
   }
   let leads = []; for (const t of byKind("leads")) { leads = parseLeads(t.rows, t.header, ctx); meta.tabs.leads = t.name; }
   let dailyCalls = []; for (const t of byKind("dailyCalls")) { dailyCalls = parseDailyCalls(t.rows, t.header); meta.tabs.dailyCalls = t.name; }
+  ctx.shortNames = new Map(centres.map((c) => [norm(shortName(c.name)), c.name]));
+  let c2c = [], c2cUnmatched = []; for (const t of byKind("clickToCalls")) { const p = parseClickToCalls(t.rows, t.header, ctx); c2c = c2c.concat(p); c2cUnmatched = c2cUnmatched.concat(p.unmatched); meta.tabs.clickToCalls = t.name; }
+  for (const r of c2c) { const c = centres.find((x) => x.name === r.centre); r.account = c?.account || r.account || ""; }
+  meta.c2cUnmatched = [...new Set(c2cUnmatched)];
   meta.unknownTabs = byKind("unknown").map((t) => t.name);
   if (!meta.dataUpTo) { const last = ads?.daily.length ? ads.daily[ads.daily.length - 1].d : (dailyCalls.length ? dailyCalls[dailyCalls.length - 1].date : ""); meta.dataUpTo = last; }
 
-  return { meta, centres, summary, weeks, dailyCalls, ads, leads, centreList };
+  // a dump that runs across several months: label the whole span, not the first month
+  if (ads?.daily.length) {
+    const f = ads.daily[0].d, l = ads.daily[ads.daily.length - 1].d;
+    if (f.slice(0, 7) !== l.slice(0, 7)) { const lab = (d) => `${+d.slice(8)} ${MONTH_NAMES[+d.slice(5, 7)].slice(0, 3)}`; meta.period = `${lab(f)} – ${lab(l)} ${l.slice(0, 4)}`; meta.dataUpTo = l; meta.multiMonth = true; }
+  }
+  return { meta, centres, summary, weeks, dailyCalls, ads, leads, centreList, c2c };
 }

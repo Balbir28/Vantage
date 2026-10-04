@@ -37,14 +37,27 @@ export function finalize(m) {
 }
 
 // ---------- period helpers ----------
+// The Ads dump can run across several months (e.g. 15 Jul → 3 Oct), so the
+// reporting window is the data's own span; "month" means the latest month in it.
+const dimOf = (d) => new Date(+d.slice(0, 4), +d.slice(5, 7), 0).getDate();
+const BOUNDS = new WeakMap();
 export function monthBounds(model) {
-  const y = model.meta.year, mo = model.meta.month;
-  const dim = new Date(y, mo, 0).getDate();
-  const first = `${y}-${pad(mo)}-01`;
-  const last = model.meta.dataUpTo && /^\d{4}-\d{2}-\d{2}$/.test(model.meta.dataUpTo) ? model.meta.dataUpTo : `${y}-${pad(mo)}-${pad(dim)}`;
-  return { first, last, dim, monthEnd: `${y}-${pad(mo)}-${pad(dim)}` };
+  if (BOUNDS.has(model)) return BOUNDS.get(model);
+  const okIso = (d) => typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d);
+  const ds = model.ads?.daily || [];
+  let first = ds.length ? ds[0].d : null, last = ds.length ? ds[ds.length - 1].d : null;
+  if (okIso(model.meta.dataUpTo) && (!last || model.meta.dataUpTo > last)) last = model.meta.dataUpTo;
+  for (const r of model.c2c || []) { if (!first || r.date < first) first = r.date; }
+  if (!first || !last) { const y = model.meta.year, mo = model.meta.month, dim = new Date(y, mo, 0).getDate(); first = first || `${y}-${pad(mo)}-01`; last = last || `${y}-${pad(mo)}-${pad(dim)}`; }
+  // a single-month report (the bundled sample) starts on the 1st
+  if (model.summary && first.slice(0, 7) === last.slice(0, 7)) first = first.slice(0, 8) + "01";
+  const monthStart = last.slice(0, 8) + "01", dim = dimOf(last);
+  const out = { first, last, dim, monthStart, monthEnd: last.slice(0, 8) + pad(dim), multiMonth: first.slice(0, 7) !== last.slice(0, 7) };
+  BOUNDS.set(model, out); return out;
 }
-export function weekBounds(model, key) {
+/** Share of a monthly budget that falls in [start, end] — each day counts 1/days-in-its-month. */
+export function budgetMonths(start, end) { let f = 0; for (let d = start; d <= end; d = addDays(d, 1)) f += 1 / dimOf(d); return f; }
+export function weekBounds(model, key) { // legacy W1–W5 (single-month sample only)
   const w = model.weeks.find((x) => x.key === key);
   if (w && w.start && w.end) return { start: w.start, end: w.end };
   const { first, monthEnd } = monthBounds(model), n = +key.slice(1);
@@ -52,13 +65,18 @@ export function weekBounds(model, key) {
   return { start, end: end > monthEnd ? monthEnd : end };
 }
 export function presets(model) {
-  const { first, last } = monthBounds(model);
-  const out = [{ key: "mtd", label: "Month to date", start: first, end: last }];
+  const { first, last, monthStart, multiMonth } = monthBounds(model);
+  const mon = (d) => new Date(d + "T00:00:00").toLocaleString("en-GB", { month: "long" });
+  const out = [{ key: "mtd", label: `Month to date (${mon(last)})`, start: monthStart > first ? monthStart : first, end: last }];
   const n = daysBetween(first, last);
   if (n > 7) out.push({ key: "l7", label: "Last 7 days", start: addDays(last, -6), end: last });
   if (n > 14) out.push({ key: "l14", label: "Last 14 days", start: addDays(last, -13), end: last });
-  const weeksSeen = new Set(model.ads?.daily.map((d) => d.w) || model.weeks.map((w) => w.key));
-  for (const k of ["W1", "W2", "W3", "W4", "W5"]) if (weeksSeen.has(k)) { const b = weekBounds(model, k); if (b.start <= last) out.push({ key: k, label: (model.weeks.find((w) => w.key === k)?.label) || `Week ${k.slice(1)}`, start: b.start, end: b.end > last ? last : b.end }); }
+  if (n > 30) out.push({ key: "l30", label: "Last 30 days", start: addDays(last, -29), end: last });
+  if (multiMonth) {
+    const pmEnd = addDays(monthStart, -1), pmStart = pmEnd.slice(0, 8) + "01";
+    out.push({ key: "pm", label: mon(pmEnd), start: pmStart < first ? first : pmStart, end: pmEnd });
+    out.push({ key: "all", label: "All data", start: first, end: last });
+  }
   return out;
 }
 export function normalizeFilter(model, f = {}) {
@@ -90,7 +108,10 @@ export function computeView(model, rawFilter = {}) {
 
   // --- typed call columns (summary/week tabs) pro-rated to the range ---
   let callsEstimated = false;
+  const c2c = model.c2c || [], hasC2c = c2c.length > 0;
+  const c2cSum = (centreName, s, e) => { let ext = 0, g = 0, t = 0, any = false; for (const r of c2c) if (r.centre === centreName && r.date >= s && r.date <= e) { ext += r.ext; g += r.ga4; t += r.total; any = true; } return any ? { callExt: ext, ga4: g, total: t } : { callExt: 0, ga4: 0, total: 0 }; };
   const typedCalls = (centreName) => {
+    if (hasC2c) return c2cSum(centreName, start, end);
     const whole = start === first && end === last && model.summary;
     if (whole) { const r = model.summary.rows.find((x) => x.centre === centreName); return r ? { callExt: r.callExt, ga4: r.ga4, wa: r.wa } : null; }
     if (!model.weeks.length) return null;
@@ -141,7 +162,7 @@ export function computeView(model, rawFilter = {}) {
     const m = emptyMetrics();
     for (const r of campRows) if (r.centre === c.name) add(m, { impr: r.impr, clicks: r.clicks, cost: r.spend, conv: r.conv, calls: r.phone, elig: r.elig, lost: r.lost });
     const tc = typedCalls(c.name); if (tc) { m.callExt = tc.callExt; m.ga4 = tc.ga4; m.wa = tc.wa ?? null; }
-    m.budget = c.budget != null ? c.budget * days / dim : null;
+    m.budget = c.budget != null ? c.budget * budgetMonths(start, end) : null;
     crmInto(m, leadsScope.filter((l) => l.centre === c.name));
     m.campaigns = campRows.filter((r) => r.centre === c.name).length;
     finalize(m);
@@ -173,7 +194,7 @@ export function computeView(model, rawFilter = {}) {
   if (!tCalls) { totals.callExt = null; totals.ga4 = null; } if (!tBudget) totals.budget = null;
   totals.days = days; finalize(totals);
   totals.campaigns = campRows.length; totals.centres = centreRows.length;
-  totals.expectedPacing = days / dim; // where spend "should" be if linear through the month
+  totals.expectedPacing = 1; // budgets are pro-rated to the range, so on-track = 100%
 
   // --- specialties ---
   const specMap = new Map();
@@ -183,10 +204,12 @@ export function computeView(model, rawFilter = {}) {
 
   // --- keywords (weekly rows → aggregated over the weeks that overlap the range) ---
   const weeksInRange = new Set(); let kwApprox = false;
-  for (const key of ["W1", "W2", "W3", "W4", "W5"]) { const b = weekBounds(model, key); if (b.start > last) continue; const oe = b.end < end ? b.end : end, os = b.start > start ? b.start : start; if (oe >= os) { weeksInRange.add(key); if (os !== b.start || oe !== (b.end < last ? b.end : last)) kwApprox = true; } }
+  if (!(model.ads?.keywords || []).some((k) => k.d)) for (const key of ["W1", "W2", "W3", "W4", "W5"]) { const b = weekBounds(model, key); if (b.start > last) continue; const oe = b.end < end ? b.end : end, os = b.start > start ? b.start : start; if (oe >= os) { weeksInRange.add(key); if (os !== b.start || oe !== (b.end < last ? b.end : last)) kwApprox = true; } }
   const kwAgg = new Map();
+  const kwDaily = (model.ads?.keywords || []).some((k) => k.d);
+  if (kwDaily) { weeksInRange.clear(); kwApprox = false; }
   for (const k of model.ads?.keywords || []) {
-    if (!weeksInRange.has(k.w) || !cScope(campaigns[k.c])) continue;
+    if ((kwDaily ? !inRange(k.d) : !weeksInRange.has(k.w)) || !cScope(campaigns[k.c])) continue;
     const key = k.c + "|" + k.adgroup + "|" + k.kw + "|" + k.match;
     let o = kwAgg.get(key);
     if (!o) { const c = campaigns[k.c]; o = { c: k.c, adgroup: k.adgroup, kw: k.kw, match: k.match, qs: null, impr: 0, clicks: 0, cost: 0, conv: 0, elig: 0, lost: 0, campaign: c.name, centre: c.centre, account: c.account, specialty: c.specialty }; kwAgg.set(key, o); }
@@ -198,20 +221,25 @@ export function computeView(model, rawFilter = {}) {
   // --- trends (whole month, scoped by account/centre; the page highlights the range) ---
   const trend = buildTrends(model, { first, last, dim, cScope, scopeCentres, scopeCentreNames, leadCentreOk, account, centre, campaigns });
 
+  // --- click-to-calls detail (Click to Calls tab) ---
+  const c2cView = clickToCallsDetail(model, { start, end, first, last, centreRows, accountRows, scopeCentreNames });
+
   // --- CRM detail ---
   const crm = crmDetail(leadsScope, centreRows, specialties, totals);
 
   const scopeLabel = [centre ? shortCentre(centre) : account === "all" ? "All ad accounts" : account, rangeLabel(start, end, first, last, model)].join(" · ");
   return { filter, period: { start, end, days, first, last, dim, label: rangeLabel(start, end, first, last, model) }, scopeLabel, baseline,
-    totals, accounts: accountRows, centres: centreRows, campaigns: campRows, specialties, keywords, kwStats, trend, crm,
-    flags: { callsEstimated, hasCalls: tCalls, hasLeads: model.leads.length > 0, hasSummary: !!model.summary, hasDailyCalls: model.dailyCalls.length > 0, hasBudget: tBudget } };
+    totals, accounts: accountRows, centres: centreRows, campaigns: campRows, specialties, keywords, kwStats, trend, crm, c2c: c2cView,
+    flags: { callsEstimated, hasC2c, hasCalls: tCalls, hasLeads: model.leads.length > 0, hasSummary: !!model.summary, hasDailyCalls: model.dailyCalls.length > 0, hasBudget: tBudget } };
 }
 
 export function rangeLabel(start, end, first, last, model) {
   const mon = (d) => new Date(d + "T00:00:00").toLocaleString("en-GB", { month: "short" });
-  if (start === first && end === last) return `${model.meta.period} · MTD`;
+  const b = monthBounds(model);
+  if (start === first && end === last) return b.multiMonth ? `All data · ${+first.slice(8)} ${mon(first)}–${+last.slice(8)} ${mon(last)}` : `${model.meta.period} · MTD`;
+  if (start === b.monthStart && end === last) return `${mon(last)} MTD`;
   if (start === end) return `${+start.slice(8)} ${mon(start)}`;
-  return `${+start.slice(8)}–${+end.slice(8)} ${mon(end)}`;
+  return start.slice(0, 7) === end.slice(0, 7) ? `${+start.slice(8)}–${+end.slice(8)} ${mon(end)}` : `${+start.slice(8)} ${mon(start)}–${+end.slice(8)} ${mon(end)}`;
 }
 export function shortCentre(name) {
   return String(name).replace(/^NMC\s+/, "").replace(/Royal Hospital,\s*/, "RH ").replace(/Specialty Hospital,\s*/, "SH ").replace(/Royal Medical Centre,\s*/, "RMC ").replace(/Medical Centre,\s*/, "MC ").replace(/Medical Centre$/, "MC").replace(/, Dubai$/, "");
@@ -259,32 +287,70 @@ function keywordStats(kws) {
 
 // ---------- trends ----------
 function buildTrends(model, ctx) {
-  const { first, last, dim, cScope, scopeCentres, leadCentreOk, account, centre, campaigns } = ctx;
+  const { first, last, cScope, scopeCentres, scopeCentreNames, leadCentreOk, account, centre, campaigns } = ctx;
   const daily = new Map();
   for (let d = first; d <= last; d = addDays(d, 1)) daily.set(d, { date: d, impr: 0, clicks: 0, spend: 0, conv: 0, elig: 0, lost: 0, calls: null, callExt: null, ga4: null, crmLeads: 0, booked: 0 });
   for (const r of model.ads?.daily || []) { const o = daily.get(r.d); if (!o || !cScope(campaigns[r.c])) continue; o.impr += r.impr; o.clicks += r.clicks; o.spend += r.cost; o.conv += r.conv; o.elig += r.elig; o.lost += r.lost; }
   for (const l of model.leads) { if (!l.created) continue; const o = daily.get(l.created.slice(0, 10)); if (!o || !leadCentreOk(l)) continue; o.crmLeads++; if (l.status === "booked") o.booked++; }
-  if (!centre && model.dailyCalls.length) for (const dc of model.dailyCalls) { const o = daily.get(dc.date); if (!o) continue; const a = account === "all" ? (dc.acc.ALL || sumAcc(dc.acc)) : dc.acc[account]; if (a) { o.calls = a.total; o.callExt = a.ext; o.ga4 = a.ga4; } }
+  // daily calls: the Click to Calls tab (per hospital, any scope) wins; else the account-level Daily Calls Trend tab
+  const byAccount = {}; for (const a of ACCOUNTS) byAccount[a] = new Map();
+  if ((model.c2c || []).length) {
+    for (const r of model.c2c) {
+      const o = daily.get(r.date); if (!o) continue;
+      if (byAccount[r.account]) byAccount[r.account].set(r.date, (byAccount[r.account].get(r.date) || 0) + r.total);
+      if (!scopeCentreNames.has(r.centre)) continue;
+      o.calls = (o.calls || 0) + r.total; o.callExt = (o.callExt || 0) + r.ext; o.ga4 = (o.ga4 || 0) + r.ga4;
+    }
+  } else if (model.dailyCalls.length) {
+    for (const dc of model.dailyCalls) { for (const a of ACCOUNTS) if (dc.acc[a]) byAccount[a].set(dc.date, dc.acc[a].total); }
+    if (!centre) for (const dc of model.dailyCalls) { const o = daily.get(dc.date); if (!o) continue; const a = account === "all" ? (dc.acc.ALL || sumAcc(dc.acc)) : dc.acc[account]; if (a) { o.calls = a.total; o.callExt = a.ext; o.ga4 = a.ga4; } }
+  }
   const dailyRows = [...daily.values()].map((o) => ({ ...o, cpl: div(o.spend, o.conv), ctr: div(o.clicks, o.impr), cpc: div(o.spend, o.clicks), is: div(o.impr, o.elig), costPerCall: o.calls ? o.spend / o.calls : null }));
+  const dailyByAccount = ACCOUNTS.map((a) => ({ account: a, values: dailyRows.map((r) => byAccount[a].get(r.date) ?? 0) }));
+  const hasDailyByAccount = dailyByAccount.some((x) => x.values.some((v) => v));
 
-  // weekly buckets (W1..W5), scoped
+  // calendar weeks (Mon–Sun), clipped to the data window — correct across month boundaries
   const weeks = [];
-  const keys = [...new Set((model.ads?.daily || []).map((r) => r.w))].sort();
-  for (const key of keys) {
-    const b = weekBounds(model, key); if (b.start > last) continue;
-    const wEnd = b.end > last ? last : b.end;
-    const m = emptyMetrics(); m.days = daysBetween(b.start, wEnd);
-    for (const r of dailyRows) if (r.date >= b.start && r.date <= wEnd) { m.impr += r.impr; m.clicks += r.clicks; m.spend += r.spend; m.conv += r.conv; m.elig += r.elig; m.lost += r.lost; m.crmLeads += r.crmLeads; m.booked += r.booked; }
-    const wt = model.weeks.find((w) => w.key === key);
-    if (wt) { let ext = 0, g = 0, any = false; for (const c of scopeCentres) { const r = wt.rows.find((x) => x.centre === c.name); if (r && (r.callExt != null || r.ga4 != null)) { any = true; ext += r.callExt || 0; g += r.ga4 || 0; } } if (any) { m.callExt = ext; m.ga4 = g; } }
-    else if (!centre) { let t = 0, any = false; for (const r of dailyRows) if (r.date >= b.start && r.date <= wEnd && r.calls != null) { t += r.calls; any = true; } if (any) { m.callExt = null; m.ga4 = null; m.phone = t; } }
-    m.budget = scopeCentres.reduce((s, c) => s + (c.budget || 0), 0) * m.days / dim || null;
+  const mon = (d) => new Date(d + "T00:00:00").toLocaleString("en-GB", { month: "short" });
+  const dow = (d) => (new Date(d + "T00:00:00").getDay() + 6) % 7;
+  for (let ws = addDays(first, -dow(first)); ws <= last; ws = addDays(ws, 7)) {
+    const s = ws < first ? first : ws, e0 = addDays(ws, 6), e = e0 > last ? last : e0;
+    const m = emptyMetrics(); m.days = daysBetween(s, e);
+    let callsAny = false, calls = 0, ext = 0, g = 0;
+    for (const r of dailyRows) if (r.date >= s && r.date <= e) { m.impr += r.impr; m.clicks += r.clicks; m.spend += r.spend; m.conv += r.conv; m.elig += r.elig; m.lost += r.lost; m.crmLeads += r.crmLeads; m.booked += r.booked; if (r.calls != null) { callsAny = true; calls += r.calls; ext += r.callExt || 0; g += r.ga4 || 0; } }
+    if (callsAny) { if (ext || g) { m.callExt = ext; m.ga4 = g; } else m.phone = calls; }
+    else if (model.weeks.length) { // single-month sample: pro-rate the typed week tabs
+      let te = 0, tg = 0, any = false;
+      for (const wt of model.weeks) { if (!wt.start || !wt.end) continue; const os = wt.start > s ? wt.start : s, oe = wt.end < e ? wt.end : e; if (oe < os) continue; const share = daysBetween(os, oe) / wt.days; for (const c of scopeCentres) { const r = wt.rows.find((x) => x.centre === c.name); if (r && (r.callExt != null || r.ga4 != null)) { any = true; te += (r.callExt || 0) * share; tg += (r.ga4 || 0) * share; } } }
+      if (any) { m.callExt = Math.round(te); m.ga4 = Math.round(tg); }
+    }
+    m.budget = scopeCentres.reduce((t, c) => t + (c.budget || 0), 0) * budgetMonths(s, e) || null;
     finalize(m);
-    const note = model.summary?.trend.find((t) => t.week === key)?.note || null;
-    weeks.push({ key, label: wt?.label || `Week ${key.slice(1)}`, start: b.start, end: wEnd, note, ...m });
+    const label = s.slice(5, 7) === e.slice(5, 7) ? `${+s.slice(8)}–${+e.slice(8)} ${mon(e)}` : `${+s.slice(8)} ${mon(s)}–${+e.slice(8)} ${mon(e)}`;
+    weeks.push({ key: s, label, start: s, end: e, note: null, ...m });
   }
   for (let i = 1; i < weeks.length; i++) { const p = weeks[i - 1], w = weeks[i]; w.wow = { spend: pct(w.spend / w.days, p.spend / p.days), conv: pct(w.conv / w.days, p.conv / p.days), cpl: pct(w.cpl, p.cpl), calls: pct((w.calls || 0) / w.days, (p.calls || 0) / p.days), booked: pct(w.booked / w.days, p.booked / p.days) }; }
-  return { daily: dailyRows, weekly: weeks };
+  return { daily: dailyRows, weekly: weeks, dailyByAccount, hasDailyByAccount };
+}
+
+// ---------- click-to-calls (typed daily per hospital) ----------
+function clickToCallsDetail(model, { start, end, centreRows, accountRows, scopeCentreNames }) {
+  const rows = (model.c2c || []);
+  if (!rows.length) return { has: false };
+  const dates = []; for (let d = start; d <= end; d = addDays(d, 1)) dates.push(d);
+  const lastEntry = rows.reduce((m, r) => (r.date > m ? r.date : m), "");
+  const byCentre = new Map();
+  for (const r of rows) {
+    if (!scopeCentreNames.has(r.centre)) continue;
+    let o = byCentre.get(r.centre); if (!o) { o = { daily: new Map(), lastDate: "" }; byCentre.set(r.centre, o); }
+    if (r.date > o.lastDate) o.lastDate = r.date;
+    if (r.date < start || r.date > end) continue;
+    o.daily.set(r.date, (o.daily.get(r.date) || 0) + r.total);
+  }
+  const centres = centreRows.map((c) => { const o = byCentre.get(c.name); return { ...c, lastDate: o?.lastDate || null, daysEntered: o ? o.daily.size : 0, daily: dates.map((d) => (o && o.daily.has(d) ? o.daily.get(d) : null)), callShare: div(c.calls || 0, (c.calls || 0) + c.conv) }; });
+  const missingLatest = centres.filter((c) => !c.lastDate || c.lastDate < lastEntry);
+  const accounts = accountRows.filter((a) => a.inScope).map((a) => ({ ...a, hospitals: centres.filter((c) => c.account === a.name) }));
+  return { has: true, dates, lastEntry, centres, accounts, missingLatest, unmatched: model.meta.c2cUnmatched || [] };
 }
 const sumAcc = (acc) => { let ext = 0, ga4 = 0, total = 0; for (const [k, v] of Object.entries(acc)) { if (k === "ALL") continue; ext += v.ext; ga4 += v.ga4; total += v.total; } return { ext, ga4, total }; };
 export const pct = (a, b) => (b && a != null && b !== 0 ? a / b - 1 : null);

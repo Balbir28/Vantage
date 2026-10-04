@@ -26,10 +26,14 @@ let toastT; const toast = (msg, ms = 2600) => { const t = $("#toast"); t.textCon
 function setModel(model, source) {
   S.model = model; S.source = { ...S.source, ...source };
   const f = normalizeFilter(model, { ...S.filter, preset: S.filter.preset || "mtd" });
-  if (!S.filter.start || S.filter.preset === "mtd") { const p = presets(model)[0]; f.start = p.start; f.end = p.end; f.preset = "mtd"; }
-  S.filter = f; S.ui = {};
+  const pr = presets(model);
+  if (S.filter.preset && S.filter.preset !== "custom") { const p = pr.find((x) => x.key === S.filter.preset) || defaultPreset(pr); f.start = p.start; f.end = p.end; f.preset = p.key; f.auto = S.filter.auto; }
+  else if (!S.filter.start) { const p = defaultPreset(pr); f.start = p.start; f.end = p.end; f.preset = p.key; f.auto = true; }
+  S.filter = f; S.ui = S.ui || {};
   recompute();
 }
+// month to date unless the month has barely started — then the last 30 days
+function defaultPreset(pr) { const mtd = pr[0]; const days = (Date.parse(mtd.end) - Date.parse(mtd.start)) / 864e5 + 1; return days >= 7 ? mtd : pr.find((p) => p.key === "l30") || mtd; }
 function recompute() {
   S.view = computeView(S.model, S.filter);
   S.insights = generateInsights(S.view);
@@ -59,7 +63,7 @@ function renderFilters() {
 }
 function renderPage() {
   const v = S.view, page = P.PAGES.find((p) => p.key === S.page) || P.PAGES[0];
-  const titles = { overview: ["Account <em>overview</em>", "Spend, demand and bookings across the network"], hospitals: ["Hospital <em>intelligence</em>", "Every centre scored on efficiency, bookings, pacing and reach"], campaigns: ["Campaign <em>intelligence</em>", "What to scale, fix and pause — by campaign name"], keywords: ["Keyword <em>intelligence</em>", "Where the clicks go and which ones never convert"], crm: ["Leads & <em>CRM</em>", "From click to booked appointment"], actions: ["Action <em>plan</em>", "Everything the data says to do, ranked by money at stake"], data: ["Data & <em>sources</em>", "What is loaded, what was recognised, how to update"] };
+  const titles = { overview: ["Account <em>overview</em>", "Spend, demand and bookings across the network"], hospitals: ["Hospital <em>intelligence</em>", "Every centre scored on efficiency, bookings, pacing and reach"], campaigns: ["Campaign <em>intelligence</em>", "What to scale, fix and pause — by campaign name"], keywords: ["Keyword <em>intelligence</em>", "Where the clicks go and which ones never convert"], crm: ["Leads & <em>CRM</em>", "From click to booked appointment"], ctr: ["Click-through <em>rate</em>", "Which ads, keywords and hospitals earn the click"], calls: ["Click-to-<em>calls</em>", "Calls per ad account, by hospital, typed daily in the sheet"], actions: ["Action <em>plan</em>", "Everything the data says to do, ranked by money at stake"], data: ["Data & <em>sources</em>", "What is loaded, what was recognised, how to update"] };
   $("#title").innerHTML = titles[page.key][0]; $("#subtitle").textContent = `${v.scopeLabel} · ${titles[page.key][1]}`;
   forgetCharts();
   const c = ctx();
@@ -135,7 +139,7 @@ function adopt(result, sourceMeta) {
   if (!model.ads && !model.summary) throw new Error("None of the loaded tabs look like a Google Ads keyword export or the month summary. Check the tab names / files.");
   if (!model.meta.year) throw new Error("Could not work out the reporting month from the data.");
   model.meta.source = sourceMeta.mode;
-  S.filter = { preset: "mtd" }; setModel(model, { ...sourceMeta, lastSync: new Date().toISOString() });
+  const keep = S.filter || {}; S.filter = { preset: keep.preset && keep.preset !== "custom" && !keep.auto ? keep.preset : null, account: keep.account, centre: keep.centre }; setModel(model, { ...sourceMeta, lastSync: new Date().toISOString() });
   kvSet("model", model); kvSet("source", S.source);
   return model;
 }
@@ -174,9 +178,11 @@ async function loadFiles(files) {
 // ---------- events ----------
 function bind() {
   document.addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-nav],[data-open-centre],[data-open-campaign],[data-open-campaign-name],[data-open-specialty],[data-filter-account],[data-filter-centre],[data-sort],[data-ui-set],[data-ask],[data-copy],[data-copy-plan],[data-open-data],[data-close-data],[data-sync],[data-theme],[data-mode],[data-chat-toggle],[data-chat-clear]");
+    const t = e.target.closest("[data-nav],[data-open-centre],[data-open-campaign],[data-open-campaign-name],[data-open-specialty],[data-filter-account],[data-filter-centre],[data-sort],[data-ui-set],[data-ask],[data-copy],[data-copy-plan],[data-open-data],[data-close-data],[data-sync],[data-theme],[data-mode],[data-chat-toggle],[data-chat-clear],[data-kw-filter],[data-c2c-template]");
     if (!t) return;
     const d = t.dataset;
+    if (d.kwFilter != null) { const [k, v] = d.kwFilter.split("="); const key = k === "match" ? "kwMatch" : "kwQs"; if (S.page !== "keywords") { S.ui.kwMatch = ""; S.ui.kwQs = ""; S.ui.kwSearch = ""; } S.ui[key] = S.page === "keywords" && S.ui[key] === v ? "" : v; if (v && !t.closest("#kw-all")) { if (S.page !== "keywords") go("keywords"); else renderPage(); requestAnimationFrame(() => $("#kw-all")?.scrollIntoView({ behavior: "smooth", block: "start" })); } else renderPage(); return; }
+    if (d.c2cTemplate != null) { downloadC2cTemplate(); return; }
     if (d.nav) return go(d.nav);
     if (d.openCentre) return openDrawer("centre", d.openCentre);
     if (d.openCampaign != null) return openDrawer("campaign", d.openCampaign);
@@ -199,7 +205,7 @@ function bind() {
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") { closeDrawer(); closeData(); }
-    if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-open-centre],[data-open-campaign],[data-filter-account],.hb-row.clickable,tr.clickable") && !e.target.matches("button,a,input,select,textarea")) { e.preventDefault(); e.target.click(); }
+    if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-open-centre],[data-open-campaign],[data-filter-account],[data-nav],[data-kw-filter],.hb-row.clickable,tr.clickable") && !e.target.matches("button,a,input,select,textarea")) { e.preventDefault(); e.target.click(); }
   });
   // search inputs re-render without losing focus
   let deb; document.addEventListener("input", (e) => { const t = e.target; if (!t.dataset.ui) return; S.ui[t.dataset.ui] = t.value; clearTimeout(deb); deb = setTimeout(() => { const key = t.dataset.ui, pos = t.selectionStart; renderPage(); const n = $(`[data-ui="${key}"]`); if (n && n.tagName === "INPUT") { n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) {} } }, t.tagName === "SELECT" ? 0 : 160); });
@@ -219,7 +225,7 @@ function bind() {
   // data modal
   $("#data-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeData(); });
   $("#d-connect").addEventListener("click", async () => { S.settings.sheetUrl = $("#d-url").value.trim(); S.settings.tabs = $("#d-tabs").value; S.settings.apiKey = $("#d-apikey").value.trim(); S.settings.clientId = $("#d-clientid").value.trim(); S.settings.autoSync = $("#d-autosync").checked; S.settings.refreshMin = Math.max(2, +$("#d-refresh").value || 15); saveSettings(); scheduleRefresh(); await syncSheet(); });
-  $("#d-sample").addEventListener("click", async () => { const m = await loadSnapshot(); S.filter = { preset: "mtd" }; setModel(m, { mode: "snapshot", sheetId: "", lastSync: null }); kvSet("model", null); kvSet("source", null); render(true); closeData(); toast("Using the bundled sample"); });
+  $("#d-sample").addEventListener("click", async () => { const m = await loadSnapshot(); S.filter = {}; setModel(m, { mode: "snapshot", sheetId: "", lastSync: null }); kvSet("model", null); kvSet("source", null); render(true); closeData(); toast("Using the bundled sample"); });
   const drop = $("#d-drop"), fileIn = $("#d-file");
   drop.addEventListener("click", () => fileIn.click()); drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileIn.click(); } });
   fileIn.addEventListener("change", () => loadFiles([...fileIn.files]));
@@ -233,6 +239,22 @@ function bind() {
   $("#ai-save").addEventListener("click", () => { AI.set({ provider: $("#ai-provider").value, keys: { gemini: $("#ai-key-gemini").value.trim(), claude: $("#ai-key-claude").value.trim() }, models: { gemini: $("#ai-model-gemini").value.trim() || "gemini-2.0-flash", claude: $("#ai-model-claude").value.trim() || "claude-sonnet-5-5" } }); renderChat(); $("#ai-status").textContent = "Saved"; toast("AI settings saved"); });
   $("#ai-test").addEventListener("click", async () => { const p = $("#ai-provider").value; if (p === "none") { $("#ai-status").textContent = "Pick a provider first"; return; } $("#ai-status").textContent = "Testing…"; try { await testProvider(p, $(`#ai-key-${p}`).value.trim(), $(`#ai-model-${p}`).value.trim()); $("#ai-status").textContent = "✓ Key works"; } catch (e) { $("#ai-status").textContent = "✕ " + e.message; } });
   window.addEventListener("hashchange", () => { const h = location.hash.replace("#", ""); if (h && h !== S.page) { S.page = h; renderShell(); renderPage(); } });
+}
+
+// ---------- Click to Calls sheet template ----------
+function downloadC2cTemplate() {
+  const m = S.model, today = new Date().toISOString().slice(0, 10);
+  // the current month, every day, every hospital grouped by ad account
+  const ym = (m.meta.dataUpTo && /^\d{4}-\d{2}/.test(m.meta.dataUpTo) ? m.meta.dataUpTo : today).slice(0, 7), dim = new Date(+ym.slice(0, 4), +ym.slice(5, 7), 0).getDate();
+  const centres = ACCOUNTS.flatMap((a) => m.centres.filter((c) => c.account === a));
+  const have = new Map((m.c2c || []).map((r) => [r.date + "|" + r.centre, r]));
+  const q = (v) => (/[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+  const lines = [["Date", "Ad Account", "Hospital", "Call Ext.", "Page Call Now", "Total Click-to-Calls"].join(",")];
+  let row = 1;
+  for (let d = 1; d <= dim; d++) { const date = `${ym}-${String(d).padStart(2, "0")}`; for (const c of centres) { row++; const e = have.get(date + "|" + c.name); lines.push([date, c.account, c.name, e ? e.ext : "", e ? e.ga4 : "", `=IF(COUNT(D${row}:E${row}),SUM(D${row}:E${row}),"")`].map(q).join(",")); } }
+  const blob = new Blob([lines.join("\n")], { type: "text/csv" }), a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = `Click to Calls ${ym}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast("Template downloaded — import it as a new tab in the sheet");
 }
 
 // ---------- auto refresh (the daily-paste workflow) ----------

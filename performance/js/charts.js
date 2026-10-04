@@ -102,11 +102,12 @@ export function heatmap({ rows, cols, fmt = fmtNum, hue = "var(--seq-rgb)" }) {
   return `<div class="hm" style="--cols:${cols.length}"><div class="hm-corner"></div>${cols.map((c) => `<div class="hm-ch">${esc(c)}</div>`).join("")}${rows.map((r) => `<div class="hm-rh" title="${esc(r.label)}">${esc(r.label)}</div>${r.values.map((v, i) => { const a = v == null ? 0 : 0.08 + 0.82 * (v / max); return `<div class="hm-c" style="background:rgba(${hue},${a.toFixed(2)})" title="${esc(r.label)} · ${esc(cols[i])}: ${fmt(v)}"><span${a > 0.55 ? ' class="on"' : ""}>${v == null ? "" : fmt(v)}</span></div>`; }).join("")}`).join("")}</div>`;
 }
 
-export function sparkline(values, { color = SERIES[0], width = 120, height = 34, area = true } = {}) {
+export function sparkline(values, { color = SERIES[0], width = 120, height = 34, area = true, stretch = false } = {}) {
   const v = values.map((x) => x ?? 0), n = v.length; if (n < 2) return "";
   const max = Math.max(1e-9, ...v), min = 0;
   const x = (i) => (i / (n - 1)) * (width - 2) + 1, y = (val) => height - 2 - ((val - min) / (max - min || 1)) * (height - 6);
   const d = v.map((val, i) => (i ? "L" : "M") + x(i).toFixed(1) + " " + y(val).toFixed(1)).join("");
+  if (stretch) return `<svg class="spark stretch" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">${area ? `<path d="${d} L${x(n - 1).toFixed(1)} ${height} L1 ${height} Z" fill="${color}" opacity="0.12"/>` : ""}<path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>`;
   return `<svg class="spark" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" aria-hidden="true">${area ? `<path d="${d} L${x(n - 1).toFixed(1)} ${height} L1 ${height} Z" fill="${color}" opacity="0.12"/>` : ""}<path d="${d}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round"/><circle cx="${x(n - 1).toFixed(1)}" cy="${y(v[n - 1]).toFixed(1)}" r="2.5" fill="${color}"/></svg>`;
 }
 
