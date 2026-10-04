@@ -83,7 +83,7 @@ export function scatter({ points, height = 260, fmtX = fmtNum, fmtY = fmtNum, xL
   if (refY != null) g += `<line x1="${padL}" x2="${W - padR}" y1="${Y(refY).toFixed(1)}" y2="${Y(refY).toFixed(1)}" class="cv-ref"/><text x="${W - padR}" y="${(Y(refY) - 4).toFixed(1)}" class="cv-annot-t" text-anchor="end">median ${fmtY(refY)}</text>`;
   if (refX != null) g += `<line y1="${padT}" y2="${padT + ih}" x1="${X(refX).toFixed(1)}" x2="${X(refX).toFixed(1)}" class="cv-ref"/>`;
   g += `<text x="${W - padR}" y="${H - 22}" class="cv-axis" text-anchor="end">${esc(xLabel)}</text><text x="${padL + 4}" y="${padT - 4}" class="cv-axis">${esc(yLabel)}</text>`;
-  points.forEach((p, i) => { const r = 5 + 13 * Math.sqrt((p.r || 1) / rmax); g += `<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="${r.toFixed(1)}" fill="${p.color || SERIES[0]}" fill-opacity="0.55" stroke="var(--surface)" stroke-width="2" class="cv-pt" data-i="${i}"/>`; });
+  points.forEach((p, i) => { const r = 5 + 13 * Math.sqrt((p.r || 1) / rmax); g += `<circle cx="${X(p.x).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="${r.toFixed(1)}" fill="${p.color || SERIES[0]}" fill-opacity="0.8" stroke="var(--surface)" stroke-width="2" class="cv-pt" data-i="${i}"/>`; });
   REG.set(id, { type: "scatter", points, fmtX, fmtY, xLabel, yLabel });
   return `<div class="cv cv-scatter" data-cv="${id}" tabindex="0" role="img" aria-label="${esc(yLabel)} against ${esc(xLabel)}"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">${g}</svg></div>`;
 }
