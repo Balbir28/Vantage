@@ -32,6 +32,16 @@ values when the quota is exhausted.
 
 ---
 
+## Vantage Pulse — paid performance (Google Sheets → intelligence)
+
+A second app lives in [`performance/`](performance/): a Google Sheets–powered paid-performance
+dashboard for the NMC Healthcare search accounts. It reads the raw Google Ads keyword export
+and the call-centre lead export straight from the sheet (or dropped files), and gives
+account-, hospital- and campaign-level intelligence with a built-in AI analyst.
+Open it at `/performance/` once deployed. See [`performance/README.md`](performance/README.md).
+
+---
+
 ## Dashboards
 
 | Page | What it shows |
