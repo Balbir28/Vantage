@@ -7,7 +7,9 @@ export) exactly as they download, and derives everything else itself:
 - **Account level** — NMC AUH, NMC DXB, NMC North Emirates, Sunny Clinics
 - **Hospital level** — every centre scored on efficiency, bookings, pacing and reach
 - **Campaign level** — scale / fix / pause by campaign name, with ad groups and keywords
-- **Keywords** — wasted spend, match types, Quality Score bands, proven winners
+- **Keywords** — wasted spend, match types, Quality Score bands (click either to list those keywords), proven winners
+- **CTR** — click-through rate by account, hospital, campaign, ad group, match type and keyword, with a daily trend
+- **Click-to-calls** — calls per ad account, segregated by hospital, from a *Click to Calls* tab typed daily in the sheet
 - **Leads & CRM** — booking funnel, speed-to-lead, departments, time of day, reasons
 - **Actions** — every finding ranked by money at stake, plus a copyable weekly plan
 - **AI analyst** — a chat panel that answers from the live numbers (no key needed) and,
@@ -58,6 +60,7 @@ are fine. What it looks for:
 | Google Ads keyword export | `Day · Campaign · Ad group · Search keyword · Impr. · Cost · Conversions…` | Everything at campaign/keyword/day level |
 | Call-centre lead export | `ID · Status · Reason · Branch · Department · Created At…` | Bookings, reasons, speed-to-lead |
 | Month summary / week tabs | `Centre · Impressions · … · Booked` | The typed call columns (call-extension and landing-page call taps) |
+| Click to Calls | `Date · Ad Account · Hospital · Call Ext. · Page Call Now · Total Click-to-Calls` | Daily calls per hospital (exact for any date range; template on the Click-to-calls page) |
 | Daily Calls Trend | `Date · Call Click Ext. · GA4 Call Now · Total Calls` | Daily calls per account |
 | Budget | `Centre · Budget (AED)` | Pacing |
 | Centre List | `Campaign name contains… · Centre · Region` | Campaign → centre mapping (a built-in default is used if absent) |
@@ -72,8 +75,8 @@ Download the two dumps the same way, paste them into the sheet (or drop them her
 
 ## Filters
 
-A single filter row scopes every page and the analyst: **date range** (month to date, last 7/14
-days, each week, or a custom from/to), **ad account**, and **hospital** (narrowed to the chosen
+A single filter row scopes every page and the analyst: **date range** (month to date, last 7/14/30
+days, the previous month, all data, or a custom from/to — the Ads dump may span several months), **ad account**, and **hospital** (narrowed to the chosen
 account). Click any account card to focus on it; open any hospital or campaign for a drill-down.
 
 ## How the numbers are defined
