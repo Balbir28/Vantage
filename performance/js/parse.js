@@ -169,7 +169,7 @@ export function detectKind(rows) {
     if (r[0] === "date" && joined.includes("| total calls |")) return { kind: "dailyCalls", header: i };
     if (/(^| )centre$/.test(r[0] || "") && r.some((c) => c.startsWith("budget")) && r.length <= 6) return { kind: "budget", header: i };
     if (/campaign name contains/.test(r[0] || "")) return { kind: "centreList", header: i };
-    if (r[0].startsWith("all ad accounts") && r.includes("days")) return { kind: "weeklyCalls", header: i };
+    if ((r[0] || "").startsWith("all ad accounts") && r.includes("days")) return { kind: "weeklyCalls", header: i };
   }
   return { kind: "unknown", header: -1 };
 }
