@@ -498,8 +498,12 @@ h2.sec em { font-style: normal; font-weight: 400; color: var(--accent); }
 .deck-tile.clickable:hover { transform: translateY(-1px); }
 h3 .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; vertical-align: 1px; }
 details.card > summary::-webkit-details-marker { display: none; }
-.deck-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (max-width: 820px) { .deck-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* 4 acquisition tiles on top, 3 call-centre outcome tiles (.r2) below, both rows full width */
+.deck-tiles { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+.deck-tiles > .deck-tile { grid-column: span 3; }
+.deck-tiles > .deck-tile.r2 { grid-column: span 4; }
+@media (max-width: 1100px) { .deck-tiles > .deck-tile { grid-column: span 6; } .deck-tiles > .deck-tile.r2 { grid-column: span 4; } }
+@media (max-width: 820px) { .deck-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .deck-tiles > .deck-tile, .deck-tiles > .deck-tile.r2 { grid-column: auto; } }
 @media (max-width: 480px) { .deck-tiles { grid-template-columns: 1fr; } }
 .kpis.k5 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
 @media (max-width: 820px) { .kpis.k5 { grid-template-columns: repeat(2, 1fr); } }
