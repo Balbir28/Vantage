@@ -8,8 +8,9 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='24' fill='%23005f73'/><path d='M22 62l14-24 12 36 12-50 10 30 8-12' fill='none' stroke='white' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Sora:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles/perf.css" />
+<link rel="stylesheet" href="styles/theme-ios.css" />
 </head>
 <body>
   <div class="bg" aria-hidden="true"></div>
@@ -60,7 +61,7 @@
         <button data-mode="apikey">API key<small>Finds every tab automatically. Link-shareable sheet.</small></button>
         <button data-mode="oauth">Google sign-in<small>Private sheets. Needs an OAuth Client ID.</small></button>
       </div>
-      <label class="fld" data-mode-only="public"><span>Tab names to read <em>(one per line — tabs are recognised by their headers, so order and extra tabs don't matter)</em></span><textarea id="d-tabs"></textarea></label>
+      <label class="fld" data-mode-only="public"><span>Tab names <em>(optional — leave empty, every tab is found automatically by its headers)</em></span><textarea id="d-tabs"></textarea></label>
       <label class="fld" data-mode-only="apikey"><span>Google API key</span><input id="d-apikey" type="password" placeholder="AIza…" autocomplete="off" /><div class="hint">Create one in Google Cloud → APIs & Services → Credentials, with the <b>Google Sheets API</b> enabled. Restrict it to this site's URL.</div></label>
       <label class="fld" data-mode-only="oauth"><span>OAuth Client ID</span><input id="d-clientid" placeholder="…apps.googleusercontent.com" autocomplete="off" /><div class="hint">Google Cloud → Credentials → OAuth client (Web). Add this site's origin to “Authorised JavaScript origins”. Sign-in happens in a Google popup; the token stays in this tab.</div></label>
       <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap"><label class="fld" style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="checkbox" id="d-autosync" style="width:auto" /> <span style="margin:0">Re-sync automatically on open and every</span></label><label class="fld" style="display:flex;align-items:center;gap:8px;margin:8px 0"><input type="number" id="d-refresh" min="2" max="240" value="15" style="width:76px;padding:7px 10px" aria-label="Refresh interval in minutes" /><span style="margin:0">minutes while open</span></label></div>
