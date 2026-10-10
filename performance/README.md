@@ -7,7 +7,8 @@ export) exactly as they download, and derives everything else itself:
 - **Account level** — NMC AUH, NMC DXB, NMC North Emirates, Sunny Clinics
 - **Hospital level** — every centre scored on efficiency, bookings, pacing and reach
 - **Campaign level** — scale / fix / pause by campaign name, with ad groups and keywords
-- **Keywords** — wasted spend, match types, Quality Score bands (click either to list those keywords), proven winners
+- **Keywords** — wasted spend, match types, Quality Score bands (click either to list those keywords), and the top 30
+  *live* wasters and proven winners with campaign, ad group, clicks and amount (paused keywords are left out — see below)
 - **CTR** — click-through rate by account, hospital, campaign, ad group, match type and keyword, with a daily trend
 - **Click-to-calls** — calls per ad account, segregated by hospital, from a *Click to Calls* tab typed daily in the sheet
 - **Leads & CRM** — booking funnel, speed-to-lead, departments, time of day, reasons
@@ -30,10 +31,9 @@ This is the operating model the app is built around:
 3. **Paste data every day** — download the Google Ads keyword report and the call-centre export
    the usual way and paste them at `A1` of **Google Ads Data** and **Lead Data**, replacing what
    is there. No reshaping, no renaming.
-4. **Open the dashboard** — it re-reads the sheet on open, again every 15 minutes while it stays
-   open (configurable), and whenever you return to the tab after 5+ minutes away. Every account,
-   hospital, campaign, keyword and CRM view recomputes and the actions re-rank. **Sync** in the
-   header refreshes on demand.
+4. **Open the dashboard** — it re-reads the sheet automatically **once an hour** (30 min – 4 h in
+   Settings). Opening the page or coming back to the tab within the hour shows the cached data
+   instantly without re-reading. Pasted new data and want it now? Press **Sync now** in the header.
 
 The synced month is cached in the browser (IndexedDB), so the dashboard opens instantly and then
 refreshes in the background. The header chip shows the source, the data date and when it last
@@ -62,6 +62,7 @@ are fine. What it looks for:
 | Month summary / week tabs | `Centre · Impressions · … · Booked` | The typed call columns (call-extension and landing-page call taps) |
 | Click to Calls | `Date · Ad Account · Hospital · Call Ext. · Page Call Now · Total Click-to-Calls` | Daily calls per hospital (exact for any date range; template on the Click-to-calls page) |
 | Daily Calls Trend | `Date · Call Click Ext. · GA4 Call Now · Total Calls` | Daily calls per account |
+| Keyword Status *(optional)* | `Campaign · Ad group · Keyword · Status` (no `Day` column) | Exact live / paused status for the keyword lists |
 | Budget | `Centre · Budget (AED)` | Pacing |
 | Centre List | `Campaign name contains… · Centre · Region` | Campaign → centre mapping (a built-in default is used if absent) |
 
@@ -150,3 +151,25 @@ performance/
 ```
 
 Regenerate the sample: `node tools/build-snapshot.mjs <folder-of-csvs>` (one CSV per tab).
+
+
+## Live vs paused keywords
+
+*Top wasters*, *Proven winners*, the hospital/campaign drawers' waste lists and the analyst only
+use keywords that are **live today** (as of the last day in the data, whatever range is on screen).
+The *All keywords* table defaults to *Live* too, with a Status filter for *Paused* / *All*.
+KPI totals (e.g. spend with no conversions) still count every keyword that spent in the range.
+
+How "live" is decided:
+
+1. **From status, when the sheet has it** — a `Keyword status` / `Status` / `Ad group status` /
+   `Campaign status` column in the Ads export, or a **Keyword Status** tab: in Google Ads →
+   Keywords → Search keywords, download the table *without* the Day segment (it carries the Status
+   column) and paste it into any tab. Paused / removed at keyword, ad group or campaign level =
+   not live. This is exact and wins over the inference below.
+2. **Otherwise from the serving pattern** — the daily export only has rows for days a keyword
+   showed, so a keyword whose keyword, ad group or campaign served most days and then went quiet
+   has been paused. One quiet day is never enough; 21+ quiet days always is; in between it depends
+   on how often it used to serve (a live keyword with that serving rate would stay quiet that long
+   less than 15% of the time). When a paused keyword starts serving again it comes back
+   automatically.
