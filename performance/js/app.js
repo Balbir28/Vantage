@@ -16,7 +16,7 @@ const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [..
 const SETTINGS_LS = "vp-settings", CHAT_LS = "vp-chat";
 const S = {
   model: null, view: null, insights: [], summary: "", filter: {}, page: "overview", ui: {}, source: { mode: "snapshot" }, chat: [], busy: false,
-  settings: { sheetUrl: "", sheetId: "", gid: "", tabs: DEFAULT_TABS.join("\n"), mode: "public", apiKey: "", clientId: "", theme: "light", chatOpen: true, autoSync: true, refreshMin: 15 },
+  settings: { sheetUrl: "", sheetId: "", gid: "", tabs: DEFAULT_TABS.join("\n"), mode: "public", apiKey: "", clientId: "", theme: "light", chatOpen: true, autoSync: true, refreshMin: 60 },
 };
 const saveSettings = () => { try { localStorage.setItem(SETTINGS_LS, JSON.stringify(S.settings)); } catch (e) {} };
 const loadSettings = () => { try { Object.assign(S.settings, JSON.parse(localStorage.getItem(SETTINGS_LS) || "{}")); } catch (e) {} };
@@ -47,10 +47,17 @@ const ctx = () => ({ model: S.model, view: S.view, insights: S.insights, summary
 // ---------- render ----------
 function renderShell() {
   $("#nav").innerHTML = P.PAGES.map((p) => `<button data-nav="${p.key}" class="${S.page === p.key ? "on" : ""}">${P.icon(p.icon)}${p.label}${p.key === "actions" ? `<span class="k">${S.insights.filter((i) => i.sev !== "info").length}</span>` : ""}</button>`).join("");
-  const src = $("#source"); const live = S.source.mode === "sheet"; src.className = "source" + (live ? " live" : "");
-  src.innerHTML = `<span class="dot"></span><b>${live ? "Google Sheets" : S.source.mode === "files" ? "Uploaded files" : "Sample data"}</b><span class="faint">${esc(S.model.meta.period)} · to ${fmtDate(S.model.meta.dataUpTo)}${S.source.lastSync ? " · synced " + relTime(S.source.lastSync) : ""}${live && S.settings.autoSync !== false ? ` · auto every ${S.settings.refreshMin || 15} min` : ""}</span><button class="btn ghost sm" data-open-data>${live ? "Settings" : "Connect"}</button>${S.settings.sheetId ? `<button class="btn ghost sm" data-sync>Sync</button>` : ""}`;
+  renderSource();
   $$(".theme button").forEach((b) => b.classList.toggle("on", b.dataset.theme === S.settings.theme));
   $("#btn-chat").classList.toggle("on", S.settings.chatOpen);
+}
+const SYNC_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5"/></svg>`;
+const refreshMin = () => Math.max(30, +S.settings.refreshMin || 60);
+const everyLabel = () => { const m = refreshMin(); return m % 60 === 0 ? (m === 60 ? "hourly" : `every ${m / 60} h`) : `every ${m} min`; };
+function renderSource() {
+  const src = $("#source"); if (!src || !S.model) return;
+  const live = S.source.mode === "sheet"; src.className = "source" + (live ? " live" : "");
+  src.innerHTML = `<span class="dot"></span><b>${live ? "Google Sheets" : S.source.mode === "files" ? "Uploaded files" : "Sample data"}</b><span class="faint">${esc(S.model.meta.period)} · to ${fmtDate(S.model.meta.dataUpTo)}${S.source.lastSync ? " · synced " + relTime(S.source.lastSync) : ""}${live && S.settings.autoSync !== false ? ` · auto-sync ${everyLabel()}` : ""}</span><button class="btn ghost sm" data-open-data>${live ? "Settings" : "Connect"}</button>${S.settings.sheetId ? `<button class="btn sm sync${syncing ? " busy" : ""}" data-sync title="Pull the latest data from the Google Sheet now">${SYNC_ICON}${syncing ? "Syncing…" : "Sync now"}</button>` : ""}`;
 }
 function renderFilters() {
   const pr = presets(S.model), f = S.filter;
@@ -125,7 +132,7 @@ async function askChat(q) {
 // ---------- data modal ----------
 function openData() {
   const s = S.settings, m = $("#data-modal");
-  $("#d-url").value = s.sheetUrl || ""; $("#d-tabs").value = s.tabs || DEFAULT_TABS.join("\n"); $("#d-apikey").value = s.apiKey || ""; $("#d-clientid").value = s.clientId || ""; $("#d-autosync").checked = s.autoSync !== false; $("#d-refresh").value = s.refreshMin || 15;
+  $("#d-url").value = s.sheetUrl || ""; $("#d-tabs").value = s.tabs || DEFAULT_TABS.join("\n"); $("#d-apikey").value = s.apiKey || ""; $("#d-clientid").value = s.clientId || ""; $("#d-autosync").checked = s.autoSync !== false; { const opts = [...$("#d-refresh").options].map((o) => +o.value), m = refreshMin(); $("#d-refresh").value = String(opts.reduce((b, v) => (Math.abs(v - m) < Math.abs(b - m) ? v : b), opts[0])); }
   $$("#d-modes button").forEach((b) => b.classList.toggle("on", b.dataset.mode === (s.mode || "public")));
   $$("[data-mode-only]").forEach((el) => (el.style.display = el.dataset.modeOnly.split(",").includes(s.mode || "public") ? "" : "none"));
   $("#d-steps").innerHTML = ""; $("#d-msg").innerHTML = "";
@@ -144,7 +151,14 @@ function adopt(result, sourceMeta) {
   kvSet("model", model); kvSet("source", S.source);
   return model;
 }
-async function syncSheet({ silent = false } = {}) {
+let syncing = null;
+function syncSheet(opts = {}) {
+  if (syncing) return syncing;
+  syncing = doSync(opts).finally(() => { syncing = null; renderSource(); });
+  renderSource();
+  return syncing;
+}
+async function doSync({ silent = false, manual = false } = {}) {
   const s = S.settings; const { id, gid } = parseSheetUrl(s.sheetUrl);
   if (!id) { if (!silent) $("#d-msg").innerHTML = `<div class="banner err">Paste a Google Sheets link first.</div>`; return; }
   s.sheetId = id; s.gid = gid || s.gid || ""; saveSettings();
@@ -159,7 +173,7 @@ async function syncSheet({ silent = false } = {}) {
     if (!silent) { steps([...res.tabs.map((t) => ({ label: `${t.name} → ${Object.entries(model.meta.tabs).find(([, n]) => n === t.name)?.[0] || (model.weeks.find((w) => w.tab === t.name) ? "week tab" : "ignored")}`, state: "ok" })), ...res.errors.map((e) => ({ label: `${e.name}: ${explainError(e.error)}`, state: "err" }))]); $("#d-msg").innerHTML = `<div class="banner ok">Loaded ${esc(model.meta.period)} · ${model.ads?.campaigns.length || 0} campaigns · ${model.leads.length} leads. <button class="btn sm" data-close-data>Open dashboard</button></div>`; }
     render(true); toast(`Synced from Google Sheets · ${model.meta.period}`);
   } catch (e) {
-    const msg = explainError(e.message || e); if (!silent) { steps([{ label: msg, state: "err" }]); $("#d-msg").innerHTML = `<div class="banner err">${esc(msg)}</div>`; } else toast("Background sync failed — using cached data", 4000);
+    const msg = explainError(e.message || e); if (!silent) { steps([{ label: msg, state: "err" }]); $("#d-msg").innerHTML = `<div class="banner err">${esc(msg)}</div>`; } else toast(manual ? `Sync failed — ${msg}` : "Background sync failed — using cached data", 4000);
   }
 }
 async function loadFiles(files) {
@@ -198,7 +212,7 @@ function bind() {
     if (d.copyPlan != null) { const plan = S.insights.filter((i) => i.sev !== "info").slice(0, 10).map((i, n) => `${n + 1}. ${i.title}\n   → ${i.action}`).join("\n"); try { await navigator.clipboard.writeText(`Vantage Pulse — action plan · ${S.view.scopeLabel}\n\n${plan}`); toast("Plan copied"); } catch (err) { toast("Copy failed"); } return; }
     if (d.openData != null) return openData();
     if (d.closeData != null) return closeData();
-    if (d.sync != null) { toast("Syncing…"); await syncSheet({ silent: true }); return; }
+    if (d.sync != null) { await syncSheet({ silent: true, manual: true }); return; }
     if (d.theme) { S.settings.theme = d.theme; document.documentElement.dataset.theme = d.theme; saveSettings(); renderShell(); return; }
     if (d.mode) { S.settings.mode = d.mode; saveSettings(); $$("#d-modes button").forEach((b) => b.classList.toggle("on", b === t)); $$("[data-mode-only]").forEach((el) => (el.style.display = el.dataset.modeOnly.split(",").includes(d.mode) ? "" : "none")); return; }
     if (d.chatToggle != null) { S.settings.chatOpen = !S.settings.chatOpen; saveSettings(); $("#shell").classList.toggle("chat-closed", !S.settings.chatOpen); $("#btn-chat").classList.toggle("on", S.settings.chatOpen); return; }
@@ -225,7 +239,7 @@ function bind() {
   ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askChat(ta.value); ta.value = ""; } });
   // data modal
   $("#data-modal").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeData(); });
-  $("#d-connect").addEventListener("click", async () => { S.settings.sheetUrl = $("#d-url").value.trim(); S.settings.tabs = $("#d-tabs").value; S.settings.apiKey = $("#d-apikey").value.trim(); S.settings.clientId = $("#d-clientid").value.trim(); S.settings.autoSync = $("#d-autosync").checked; S.settings.refreshMin = Math.max(2, +$("#d-refresh").value || 15); saveSettings(); scheduleRefresh(); await syncSheet(); });
+  $("#d-connect").addEventListener("click", async () => { S.settings.sheetUrl = $("#d-url").value.trim(); S.settings.tabs = $("#d-tabs").value; S.settings.apiKey = $("#d-apikey").value.trim(); S.settings.clientId = $("#d-clientid").value.trim(); S.settings.autoSync = $("#d-autosync").checked; S.settings.refreshMin = Math.max(30, +$("#d-refresh").value || 60); saveSettings(); scheduleRefresh(); await syncSheet(); });
   $("#d-sample").addEventListener("click", async () => { const m = await loadSnapshot(); S.filter = {}; setModel(m, { mode: "snapshot", sheetId: "", lastSync: null }); kvSet("model", null); kvSet("source", null); render(true); closeData(); toast("Using the bundled sample"); });
   const drop = $("#d-drop"), fileIn = $("#d-file");
   drop.addEventListener("click", () => fileIn.click()); drop.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileIn.click(); } });
@@ -259,11 +273,15 @@ function downloadC2cTemplate() {
 }
 
 // ---------- auto refresh (the daily-paste workflow) ----------
-let refreshT;
+// Hourly by default (Settings: 30 min – 4 h). The sheet is only re-read when the last sync is
+// older than the interval — opening the page or coming back to the tab within the hour just shows
+// the cached data. "Sync now" in the header pulls immediately.
+let refreshT, clockT;
+const syncDue = () => S.settings.autoSync !== false && S.settings.sheetId && S.source.mode === "sheet" && Date.now() - (Date.parse(S.source.lastSync || 0) || 0) >= refreshMin() * 60000;
 function scheduleRefresh() {
   clearInterval(refreshT);
-  const min = Math.max(2, +S.settings.refreshMin || 15);
-  refreshT = setInterval(() => { if (S.settings.autoSync !== false && S.settings.sheetId && S.source.mode === "sheet" && document.visibilityState === "visible") syncSheet({ silent: true }); }, min * 60000);
+  refreshT = setInterval(() => { if (document.visibilityState === "visible" && syncDue()) syncSheet({ silent: true }); }, 5 * 60000); // cheap check, no network unless due
+  clearInterval(clockT); clockT = setInterval(renderSource, 60000); // keep "synced 12 min ago" current
 }
 // count-up on the big numbers (CSS-free, respects reduced motion)
 function animateNumbers(root) {
@@ -282,6 +300,7 @@ function animateNumbers(root) {
 async function boot() {
   loadSettings();
   if (!S.settings.themeV3) { S.settings.theme = "light"; S.settings.themeV3 = true; saveSettings(); }
+  if (!S.settings.syncV2) { S.settings.refreshMin = 60; S.settings.syncV2 = true; saveSettings(); } // was every 15 min
   if (!("chatOpen" in JSON.parse(localStorage.getItem(SETTINGS_LS) || "{}")) && window.innerWidth < 1100) S.settings.chatOpen = false;
   document.documentElement.dataset.theme = S.settings.theme || "light";
   $("#shell").classList.toggle("chat-closed", S.settings.chatOpen === false);
@@ -293,9 +312,9 @@ async function boot() {
   setModel(model, source || { mode: "snapshot" });
   render(true); renderChat();
   if (!S.chat.length) { S.chat.push({ role: "assistant", content: `Hi — I'm your performance analyst. I'm reading **${S.model.meta.period}** across ${S.model.centres.length} centres and ${S.model.ads?.campaigns.length || 0} campaigns.\n\nAsk me anything, or tap a suggestion below.` }); renderChat(); }
-  if (S.settings.autoSync !== false && S.settings.sheetId && S.source.mode === "sheet") syncSheet({ silent: true });
+  if (syncDue()) syncSheet({ silent: true });
   scheduleRefresh();
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && S.settings.autoSync !== false && S.settings.sheetId && S.source.mode === "sheet" && Date.now() - Date.parse(S.source.lastSync || 0) > 5 * 60000) syncSheet({ silent: true }); });
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && syncDue()) syncSheet({ silent: true }); });
   window.__vp = { S, go, setFilter, openDrawer, askChat };
 }
 boot().catch((e) => { console.error(e); $("#page").innerHTML = `<div class="empty"><h3>Could not start</h3>${esc(e.message)}</div>`; });

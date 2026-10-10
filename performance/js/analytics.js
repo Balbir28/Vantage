@@ -4,7 +4,7 @@
 //  the two raw dumps (Google Ads keyword export + call-centre export);
 //  the sheet's summary/week tabs only contribute the typed call columns.
 // ============================================================
-import { ACCOUNTS, ACCOUNT_META, specialtyOfDept } from "./parse.js";
+import { ACCOUNTS, ACCOUNT_META, specialtyOfDept, statusKey } from "./parse.js";
 
 const sum = (arr, k) => arr.reduce((s, o) => s + (o[k] || 0), 0);
 const div = (a, b) => (b ? a / b : null);
@@ -215,8 +215,9 @@ export function computeView(model, rawFilter = {}) {
     if (!o) { const c = campaigns[k.c]; o = { c: k.c, adgroup: k.adgroup, kw: k.kw, match: k.match, qs: null, impr: 0, clicks: 0, cost: 0, conv: 0, elig: 0, lost: 0, campaign: c.name, centre: c.centre, account: c.account, specialty: c.specialty }; kwAgg.set(key, o); }
     o.impr += k.impr; o.clicks += k.clicks; o.cost += k.cost; o.conv += k.conv; o.elig += k.elig; o.lost += k.lost; if (k.qs != null) o.qs = o.qs == null ? k.qs : Math.max(o.qs, k.qs);
   }
-  const keywords = [...kwAgg.values()].map((o) => { o.cpl = div(o.cost, o.conv); o.ctr = div(o.clicks, o.impr); o.cpc = div(o.cost, o.clicks); o.is = div(o.impr, o.elig); o.lostIs = div(o.lost, o.elig); return o; });
-  const kwStats = keywordStats(keywords); kwStats.weeks = [...weeksInRange]; kwStats.approx = kwApprox;
+  const LV = keywordLiveness(model);
+  const keywords = [...kwAgg.values()].map((o) => { o.cpl = div(o.cost, o.conv); o.ctr = div(o.clicks, o.impr); o.cpc = div(o.cost, o.clicks); o.is = div(o.impr, o.elig); o.lostIs = div(o.lost, o.elig); const lv = LV.of(o.c, o.adgroup, o.kw, o.match); o.live = lv.live; o.lastServed = lv.last; o.pausedAt = lv.why || null; return o; });
+  const kwStats = keywordStats(keywords, LV); kwStats.weeks = [...weeksInRange]; kwStats.approx = kwApprox;
 
   // --- trends (whole month, scoped by account/centre; the page highlights the range) ---
   const trend = buildTrends(model, { first, last, dim, cScope, scopeCentres, scopeCentreNames, leadCentreOk, account, centre, campaigns });
@@ -282,11 +283,75 @@ export function healthScore(r, netCplMed) {
   return { health: score, healthBand: band, healthParts: { eff: Math.round(eff * 100), conv: Math.round(conv * 100), pace: Math.round(pace * 100), reach: Math.round(reach * 100) } };
 }
 
+// ---------- keyword liveness ----------
+// Which keywords are still running *today* (as of the last day in the data), independent of the
+// date range on screen. Paused keywords must not be suggested as "pause these" or "protect these".
+//  1. Status from the sheet wins: a status column in the Ads export, or a Keyword Status tab
+//     (keyword, ad group or campaign paused/removed → not live).
+//  2. Otherwise it is read from the serving pattern: the daily export only has rows for days a
+//     keyword showed, so a keyword (or its ad group / campaign) that served most days and then
+//     went quiet has been paused. Quiet for 1 day is never enough; quiet for 21+ days always is;
+//     in between it depends on how often it used to serve (the chance a live keyword with that
+//     serving rate stays quiet that long must be under 15%).
+const LIVE_CACHE = new WeakMap();
+const DAY = 864e5, dayNum = (d) => Math.round(Date.parse(d) / DAY), dayIso = (n) => new Date(n * DAY).toISOString().slice(0, 10);
+function quietTooLong(days, endN) { // days: sorted unique day numbers it served on
+  const lastN = days[days.length - 1], gap = endN - lastN;
+  if (gap < 2) return false;
+  if (gap >= 21) return true;
+  const from = Math.max(days[0], lastN - 13);
+  let served = 0; for (let i = days.length - 1; i >= 0 && days[i] >= from; i--) served++;
+  const p = Math.min(0.98, served / Math.max(7, lastN - from + 1));
+  return Math.pow(1 - p, gap) < 0.15;
+}
+export function keywordLiveness(model) {
+  if (LIVE_CACHE.has(model)) return LIVE_CACHE.get(model);
+  const ads = model.ads, rows = ads?.keywords || [], campaigns = ads?.campaigns || [];
+  const st = ads?.status && (Object.keys(ads.status.k).length || Object.keys(ads.status.a).length || Object.keys(ads.status.c).length) ? ads.status : null;
+  const daily = rows.some((k) => k.d);
+  const accEnd = {}, kwDays = new Map(), agDays = new Map(), cDays = new Map();
+  const put = (m, key, n) => { let a = m.get(key); if (!a) { a = new Set(); m.set(key, a); } a.add(n); };
+  if (daily) {
+    for (const r of ads.daily || []) { if (!(r.impr > 0 || r.cost > 0 || r.clicks > 0)) continue; const acc = campaigns[r.c]?.account || "", n = dayNum(r.d); if (!(n <= accEnd[acc])) accEnd[acc] = n; put(cDays, r.c, n); }
+    for (const k of rows) { if (!k.d || !(k.impr > 0 || k.cost > 0 || k.clicks > 0)) continue; const n = dayNum(k.d); put(agDays, k.c + "|" + k.adgroup, n); put(kwDays, k.c + "|" + k.adgroup + "|" + k.kw + "|" + k.match, n); }
+  }
+  const sorted = new Map(), memo = new Map();
+  const daysOf = (m, key) => { const id = m === cDays ? "c" + key : m === agDays ? "a" + key : "k" + key; let a = sorted.get(id); if (!a) { a = [...(m.get(key) || [])].sort((x, y) => x - y); sorted.set(id, a); } return a; };
+  const allEnd = Math.max(-Infinity, ...Object.values(accEnd));
+  const quiet = (m, key, endN) => { const d = daysOf(m, key); return d.length ? quietTooLong(d, endN) : true; };
+  let usedStatus = false, usedInfer = false;
+  const of = (c, adgroup, kw, match) => {
+    const key = c + "|" + adgroup + "|" + kw + "|" + match;
+    let r = memo.get(key); if (r) return r;
+    const camp = campaigns[c]?.name || "", kd = daysOf(kwDays, key), last = kd.length ? dayIso(kd[kd.length - 1]) : null;
+    if (st) {
+      const cs = st.c[statusKey.camp(camp)], as = st.a[statusKey.ag(camp, adgroup)];
+      let ks = st.k[statusKey.kw(camp, adgroup, kw, match)]; if (ks == null) ks = st.k[statusKey.kw(camp, adgroup, kw, null)];
+      if (cs === false || as === false || ks === false) { usedStatus = true; r = { live: false, last, how: "status", why: cs === false ? "campaign" : as === false ? "ad group" : "keyword" }; memo.set(key, r); return r; }
+      if (ks === true) { usedStatus = true; r = { live: true, last, how: "status" }; memo.set(key, r); return r; }
+    }
+    if (!daily) { r = { live: true, last, how: "none" }; memo.set(key, r); return r; }
+    usedInfer = true;
+    const endN = accEnd[campaigns[c]?.account || ""] ?? allEnd;
+    if (quiet(cDays, c, endN)) r = { live: false, last, how: "inferred", why: "campaign" };
+    else if (quiet(agDays, c + "|" + adgroup, endN)) r = { live: false, last, how: "inferred", why: "ad group" };
+    else if (quiet(kwDays, key, endN)) r = { live: false, last, how: "inferred", why: "keyword" };
+    else r = { live: true, last, how: "inferred" };
+    memo.set(key, r); return r;
+  };
+  const out = { of, asOf: Number.isFinite(allEnd) ? dayIso(allEnd) : null, hasStatus: !!st, statusTab: st?.src || null, daily, get source() { return usedStatus && usedInfer ? "mixed" : usedStatus ? "status" : usedInfer ? "inferred" : "none"; } };
+  LIVE_CACHE.set(model, out);
+  return out;
+}
+
 // ---------- keyword intelligence ----------
-function keywordStats(kws) {
+function keywordStats(kws, liveness) {
   const spent = kws.filter((k) => k.cost > 0);
-  const wasted = spent.filter((k) => k.conv < 0.01).sort((a, b) => b.cost - a.cost);
-  const winners = spent.filter((k) => k.conv >= 1).sort((a, b) => a.cpl - b.cpl);
+  const isLive = (k) => k.live !== false;
+  const wastedAll = spent.filter((k) => k.conv < 0.01).sort((a, b) => b.cost - a.cost);
+  const winnersAll = spent.filter((k) => k.conv >= 1).sort((a, b) => a.cpl - b.cpl);
+  const wasted = wastedAll.filter(isLive), wastedPaused = wastedAll.filter((k) => !isLive(k));
+  const winners = winnersAll.filter(isLive);
   const byMatch = new Map();
   for (const k of spent) { const key = k.match || "Unknown"; let m = byMatch.get(key); if (!m) { m = { match: key, cost: 0, conv: 0, clicks: 0, impr: 0, n: 0 }; byMatch.set(key, m); } m.cost += k.cost; m.conv += k.conv; m.clicks += k.clicks; m.impr += k.impr; m.n++; }
   const totalCost = sum(spent, "cost");
@@ -294,9 +359,16 @@ function keywordStats(kws) {
   const bands = [{ band: "QS 1–3", min: 1, max: 3 }, { band: "QS 4–6", min: 4, max: 6 }, { band: "QS 7–10", min: 7, max: 10 }, { band: "No score", min: null, max: null }].map((b) => ({ ...b, cost: 0, impr: 0, conv: 0, clicks: 0, n: 0 }));
   for (const k of spent) { const b = k.qs == null ? bands[3] : bands.find((x) => x.min != null && k.qs >= x.min && k.qs <= x.max) || bands[3]; b.cost += k.cost; b.impr += k.impr; b.conv += k.conv; b.clicks += k.clicks; b.n++; }
   for (const b of bands) { b.share = div(b.cost, totalCost); b.cpl = div(b.cost, b.conv); }
-  const wastedTotal = sum(wasted, "cost");
+  const wastedTotal = sum(wastedAll, "cost");
   const lowQsSpend = bands[0].cost;
-  return { wasted: wasted.slice(0, 40), wastedTotal, wastedCount: wasted.length, winners: winners.slice(0, 25), matchTypes, qsBands: bands, lowQsSpend, totalCost, keywordsWithSpend: spent.length };
+  return {
+    wasted: wasted.slice(0, 60), wastedTotal, wastedCount: wastedAll.length, // wasted/winners = live keywords only; totals = all spend in range
+    wastedLiveTotal: sum(wasted, "cost"), wastedLiveCount: wasted.length, wastedPausedCount: wastedPaused.length, wastedPausedTotal: sum(wastedPaused, "cost"),
+    winners: winners.slice(0, 60), winnersPausedCount: winnersAll.length - winners.length,
+    liveCount: spent.filter(isLive).length, pausedCount: spent.filter((k) => !isLive(k)).length,
+    liveSource: liveness?.source || "none", liveAsOf: liveness?.asOf || null, statusTab: liveness?.statusTab || null,
+    matchTypes, qsBands: bands, lowQsSpend, totalCost, keywordsWithSpend: spent.length,
+  };
 }
 
 // ---------- trends ----------

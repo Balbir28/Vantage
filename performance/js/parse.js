@@ -12,7 +12,9 @@
 //    dailyCalls:[ { date, acc:{ account:{ext,ga4,total} } } ]
 //    ads:       { campaigns:[{name,account,centre,region,specialty}],
 //                 daily:[{c,d,w,impr,clicks,cost,conv,calls,elig,lost}],
-//                 keywords:[{c,adgroup,kw,match,d,w,qs,impr,clicks,cost,conv,elig,lost}] }  (one row per keyword per day)
+//                 keywords:[{c,adgroup,kw,match,d,w,qs,impr,clicks,cost,conv,elig,lost}],  (one row per keyword per day)
+//                 status:{ k:{"camp|ag|kw|match":bool}, a:{"camp|ag":bool}, c:{camp:bool}, src } | null }
+//                 (true = enabled/live, false = paused/removed — from a status column or a Keyword Status tab)
 //    c2c:       [ { date, centre, account, ext, ga4, total } ]  (Click to Calls tab — typed daily per hospital)
 //    leads:     [ { id,status,reason,dept,centre,priority,created,respMin,week,agent,doctor } ]
 //  }
@@ -161,11 +163,33 @@ export function specialtyOf(campaign) {
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : "Other";
 }
 
+// ---------- keyword / ad group / campaign status ----------
+const KW_TEXT = /^(search )?keyword( text)?$/;
+const KW_STATUS = /^(search )?(keyword )?(status|state)$/;
+const STATUS_ANY = /^((search )?keyword |campaign |ad group )?(status|state)$/;
+/** "Paused" / "Campaign paused" / "Removed" → false · "Enabled" / "Eligible" / "Eligible (limited)" → true · blank → null */
+export function statusLive(v) {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (!s || s === "--" || s === "—") return null;
+  if (/paus|remov|ended|suspend|disapprov|not eligible/.test(s)) return false;
+  return true;
+}
+const sk = (s) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+export const matchKey = (m) => sk(m).replace(/\s*\(close variant\)/, "").replace(/ match$/, "") || "*";
+export const statusKey = { camp: (c) => sk(c), ag: (c, a) => sk(c) + "|" + sk(a), kw: (c, a, k, m) => sk(c) + "|" + sk(a) + "|" + sk(k) + "|" + (m == null ? "*" : matchKey(m)) };
+function emptyStatus(src) { return { k: {}, a: {}, c: {}, src }; }
+function putStatus(st, camp, ag, kw, match, kwLive, agLive, campLive) {
+  if (campLive != null) st.c[statusKey.camp(camp)] = campLive;
+  if (agLive != null) st.a[statusKey.ag(camp, ag)] = agLive;
+  if (kwLive != null && kw) { st.k[statusKey.kw(camp, ag, kw, match)] = kwLive; st.k[statusKey.kw(camp, ag, kw, null)] = kwLive; }
+}
+
 // ---------- tab detection ----------
 export function detectKind(rows) {
   const scan = rows.slice(0, 10).map((r) => r.map((c) => { const n = norm(c); return n.length > 60 ? n.slice(-60) : n; }));
   for (let i = 0; i < scan.length; i++) {
     const r = scan[i], joined = " | " + r.join(" | ") + " | ";
+    if (r.includes("campaign") && r.includes("ad group") && !r.includes("day") && r.some((c) => KW_TEXT.test(c)) && r.some((c) => STATUS_ANY.test(c))) return { kind: "kwStatus", header: i };
     if (r.includes("campaign") && r.some((c) => /^impr/.test(c)) && r.includes("search keyword")) return { kind: "ads", header: i };
     if (r[0] === "id" && r.includes("status") && r.includes("reason")) return { kind: "leads", header: i };
     if (/(^| )centre$/.test(r[0] || "") && r.includes("impressions") && r.includes("booked")) return { kind: "centreTable", header: i };
@@ -190,7 +214,8 @@ const COLS = {
   ads: { day: /^day$/, campaign: /^campaign$/, account: /^account name$/, adgroup: /^ad group$/, kw: /^search keyword$/,
     match: /^search keyword match type$/, qs: /^quality score$/, impr: /^impr/, clicks: /^clicks$/, cost: /^cost$/,
     conv: /^conversions$/, calls: /^phone calls$/, is: /^search impr share$/, lostRank: /^search lost is rank/,
-    centre: /^centre/, region: /^region/, week: /^week/, elig: /^eligible impr/, lostW: /^lost is weighted/ },
+    centre: /^centre/, region: /^region/, week: /^week/, elig: /^eligible impr/, lostW: /^lost is weighted/,
+    kwSt: KW_STATUS, agSt: /^ad group (status|state)$/, campSt: /^campaign (status|state)$/ },
   leads: { id: /^id$/, status: /^status$/, reason: /^reason$/, dept: /^department$/, branch: /^branch$/, priority: /^lead priority$/,
     created: /^created at$/, resp: /^response time$/, agent: /^handled by$/, doctor: /^doctor$/, centre: /^centre/, week: /^week/ },
 };
@@ -336,6 +361,9 @@ export function parseAds(rows, header, ctx = {}) {
   const campIdx = new Map(), campaigns = [];
   const daily = new Map(), kws = new Map();
   let rowsRead = 0, unmapped = new Set();
+  const hasStatus = col.kwSt != null || col.agSt != null || col.campSt != null;
+  const stSeen = new Map(); // keyword → latest day its status was read from
+  const status = hasStatus ? emptyStatus("ads") : null;
   for (let i = header + 1; i < rows.length; i++) {
     const r = rows[i];
     const name = String(cell(r, col.campaign) ?? "").trim();
@@ -371,14 +399,43 @@ export function parseAds(rows, header, ctx = {}) {
     if (!kd) { kd = { c: ci, adgroup, kw, match, d, w, qs: null, impr: 0, clicks: 0, cost: 0, conv: 0, elig: 0, lost: 0 }; kws.set(kk, kd); }
     kd.impr += impr; kd.clicks += clicks; kd.cost += cost; kd.conv += conv; kd.elig += elig; kd.lost += lostW;
     const qs = num(cell(r, col.qs)); if (qs != null) kd.qs = kd.qs == null ? qs : Math.max(kd.qs, qs); // latest/best observed
+    if (hasStatus) { // the latest day's status wins
+      const key = statusKey.kw(name, adgroup, kw, match), prev = stSeen.get(key);
+      if (!prev || prev <= d) { stSeen.set(key, d); putStatus(status, name, adgroup, kw, match, statusLive(cell(r, col.kwSt)), statusLive(cell(r, col.agSt)), statusLive(cell(r, col.campSt))); }
+    }
   }
   const round = (o, keys) => { for (const k of keys) o[k] = Math.round(o[k] * 100) / 100; return o; };
   return {
     campaigns,
     daily: [...daily.values()].map((o) => round(o, ["cost", "conv", "elig", "lost"])).sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : a.c - b.c)),
     keywords: [...kws.values()].map((o) => round(o, ["cost", "conv", "elig", "lost"])),
-    rowsRead, unmapped: [...unmapped],
+    rowsRead, unmapped: [...unmapped], status,
   };
+}
+
+/** Keyword Status tab — a plain (no Day column) keyword download from Google Ads:
+ *  Campaign | Ad group | Keyword | Match type | Status / Keyword status | Campaign status | Ad group status
+ *  Keyword text may carry match punctuation ("phrase", [exact]) — stripped. Any one status column is enough. */
+export function parseKwStatus(rows, header, name) {
+  const H = rows[header].map(norm);
+  const find = (re) => H.findIndex((h) => re.test(h));
+  const col = { campaign: find(/^campaign$/), adgroup: find(/^ad group$/), kw: find(KW_TEXT), match: find(/^((search )?keyword )?match type$/), agSt: find(/^ad group (status|state)$/), campSt: find(/^campaign (status|state)$/) };
+  const kwCols = H.map((h, i) => (KW_STATUS.test(h) ? i : -1)).filter((i) => i >= 0);
+  const st = emptyStatus(name || "Keyword Status");
+  let n = 0;
+  for (let i = header + 1; i < rows.length; i++) {
+    const r = rows[i], camp = String(cell(r, col.campaign) ?? "").trim(), ag = String(cell(r, col.adgroup) ?? "").trim();
+    let kw = String(cell(r, col.kw) ?? "").trim();
+    if (!camp || /^total/i.test(camp) || /^total/i.test(kw)) continue;
+    let match = col.match >= 0 ? String(cell(r, col.match) ?? "").trim() : "";
+    const pm = kw.match(/^\[(.*)\]$/) || kw.match(/^"(.*)"$/);
+    if (pm) { if (!match) match = kw.startsWith("[") ? "Exact" : "Phrase"; kw = pm[1].trim(); } else if (kw && !match && col.match < 0) match = null;
+    let kwLive = null; for (const ci of kwCols) { const v = statusLive(cell(r, ci)); if (v === false) { kwLive = false; break; } if (v === true) kwLive = true; }
+    putStatus(st, camp, ag, kw, match, kwLive, col.agSt >= 0 ? statusLive(cell(r, col.agSt)) : null, col.campSt >= 0 ? statusLive(cell(r, col.campSt)) : null);
+    n++;
+  }
+  st.rows = n;
+  return st;
 }
 
 export function parseLeads(rows, header, ctx = {}) {
@@ -464,6 +521,11 @@ export function buildModel(tabs, opts = {}) {
 
   const ctx = { centreList, centreRegion, year: meta.year, knownCentres: centres.map((c) => c.name), anonymize: !!opts.anonymize };
   let ads = null; for (const t of byKind("ads")) { ads = parseAds(t.rows, t.header, ctx); meta.tabs.ads = t.name; }
+  // Keyword Status tab (current status snapshot) overrides any status read from the daily export
+  for (const t of byKind("kwStatus")) {
+    const st = parseKwStatus(t.rows, t.header, t.name); meta.tabs.kwStatus = t.name;
+    if (ads && st.rows) { const base = ads.status || emptyStatus(t.name); Object.assign(base.k, st.k); Object.assign(base.a, st.a); Object.assign(base.c, st.c); base.src = t.name; ads.status = base; }
+  }
   if (ads) { // fill regions/accounts on campaigns from centre registry
     for (const c of ads.campaigns) { if (!c.region && c.centre) c.region = centreRegion[c.centre] || ""; if (!c.account) c.account = accountForRegion(c.region) || ""; }
     if (!meta.year && ads.daily.length) { meta.year = +ads.daily[0].d.slice(0, 4); meta.month = +ads.daily[0].d.slice(5, 7); meta.period = `${MONTH_NAMES[meta.month]} ${meta.year}`; ctx.year = meta.year; }
